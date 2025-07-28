@@ -38,7 +38,7 @@ let userIdCounter = 1
 // Cấu hình Nodemailer
 let transporter
 try {
-  transporter = nodemailer.createTransporter({
+  transporter = nodemailer.createTransport({
     host: process.env.SMTP_HOST || "smtp.gmail.com",
     port: Number.parseInt(process.env.SMTP_PORT || "587"),
     secure: process.env.SMTP_PORT === "465",
