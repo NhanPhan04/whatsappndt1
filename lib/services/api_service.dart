@@ -25,16 +25,15 @@ class ApiService {
     }
   }
 
-  static Future<Map<String, dynamic>> sendTestOTP(String phone, String countryCode) async {
+  static Future<Map<String, dynamic>> sendTestOTP(String email) async {
     try {
-      print('🧪 Creating test OTP for: $countryCode$phone');
+      print('🧪 Creating test OTP for: $email');
 
       final response = await http.post(
         Uri.parse('$baseUrl/test-otp'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
-          'phoneNumber': phone,
-          'countryCode': countryCode,
+          'email': email,
         }),
       );
 
