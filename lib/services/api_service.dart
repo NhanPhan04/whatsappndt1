@@ -44,16 +44,15 @@ class ApiService {
     }
   }
 
-  static Future<Map<String, dynamic>> verifyOTP(String phone, String countryCode, String otp) async {
+  static Future<Map<String, dynamic>> verifyOTP(String email, String otp) async {
     try {
-      print('🔐 Verifying OTP: $otp for $countryCode$phone');
+      print('🔐 Verifying OTP: $otp for $email');
 
       final response = await http.post(
         Uri.parse('$baseUrl/verify-otp'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
-          'phoneNumber': phone,
-          'countryCode': countryCode,
+          'email': email,
           'otp': otp,
         }),
       );
