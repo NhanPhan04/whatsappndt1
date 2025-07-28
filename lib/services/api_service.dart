@@ -2,19 +2,18 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 class ApiService {
-  // ⚠️ ĐỔI THÀNH PORT 3000 (giống server)
-  static const String baseUrl = 'http://192.168.2.34:3000/api';
+  // Updated to use localhost for development
+  static const String baseUrl = 'http://localhost:3000/api';
 
-  static Future<Map<String, dynamic>> sendOTP(String phone, String countryCode) async {
+  static Future<Map<String, dynamic>> sendOTP(String email) async {
     try {
-      print('📱 Sending OTP to: $countryCode$phone');
+      print('📱 Sending OTP to: $email');
 
       final response = await http.post(
         Uri.parse('$baseUrl/send-otp'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
-          'phoneNumber': phone,
-          'countryCode': countryCode,
+          'email': email,
         }),
       ).timeout(Duration(seconds: 30));
 
