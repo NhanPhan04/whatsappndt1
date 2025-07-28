@@ -5,8 +5,8 @@ import 'package:socket_io_client/socket_io_client.dart' as IO;
 import 'package:path/path.dart';
 
 class AuthService {
-  static const String baseUrl = 'http://192.168.2.34:3000/api';
-  static const String socketUrl = 'http://192.168.2.34:3000';
+  static const String baseUrl = 'http://localhost:3000/api';
+  static const String socketUrl = 'http://localhost:3000';
   static const FlutterSecureStorage _storage = FlutterSecureStorage();
 
   static IO.Socket? _socket;
