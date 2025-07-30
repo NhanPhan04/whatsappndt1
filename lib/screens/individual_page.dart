@@ -914,5 +914,6 @@ class _IndividualPageState extends State<IndividualPage> {
     socket.off("typing");
     socket.off("message_status_update");
     super.dispose();
+    //
   }
 }
