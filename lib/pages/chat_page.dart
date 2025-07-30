@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
 import '../models/chat_model.dart';
 import '../screens/individual_page.dart';
-import '../services/auth_service.dart'; // Import AuthService
+import '../services/auth_service.dart';
 
 class ChatPage extends StatefulWidget {
-  // Bỏ chatmodels vì sẽ tải từ API
   final ChatModel sourchat;
 
   ChatPage({
@@ -17,30 +16,48 @@ class ChatPage extends StatefulWidget {
 }
 
 class _ChatPageState extends State<ChatPage> {
-  List<ChatModel> chats = []; // Danh sách người dùng và nhóm từ API
-  List<ChatModel> filteredChats = []; // Dùng cho tìm kiếm nếu có
+  List<ChatModel> chats = [];
+  List<ChatModel> filteredChats = [];
   bool isLoading = true;
   String errorMessage = "";
-
   int currentPageUsers = 1;
   int totalPagesUsers = 1;
   bool isFetchingMoreUsers = false;
-
   int currentPageGroups = 1;
   int totalPagesGroups = 1;
   bool isFetchingMoreGroups = false;
-
   final ScrollController _scrollController = ScrollController();
 
   @override
   void initState() {
     super.initState();
-    _fetchChats(); // Tải người dùng và nhóm khi khởi tạo
+    _fetchChats();
     _scrollController.addListener(_scrollListener);
-    AuthService.getSocket().on("new_group_chat", (data) {
-      // Lắng nghe sự kiện nhóm mới được tạo
-      print("Received new group chat: $data");
-      _fetchChats(forceRefresh: true); // Làm mới danh sách chat
+    AuthService.getSocket().on("chat_list_update", (data) {
+      print("Received chat list update: $data");
+      final String chatId = data['chatId'];
+      final String lastMessageContent = data['lastMessageContent'] ?? "";
+      final DateTime lastMessageAt = DateTime.parse(data['lastMessageAt']);
+      final bool isGroup = data['isGroup'] ?? false;
+
+      setState(() {
+        final index = chats.indexWhere((chat) =>
+        (isGroup && chat.groupId == chatId) ||
+            (!isGroup && chat.userId == chatId));
+
+        if (index != -1) {
+          // Update existing chat
+          chats[index].lastMessageAt = lastMessageAt;
+          chats[index].lastMessageContent = lastMessageContent;
+        } else {
+          // If chat not found (e.g., new chat with a user not yet fetched),
+          // re-fetch all chats to ensure it appears.
+          // This is a fallback for simplicity; a more robust solution
+          // would fetch only the new chat's details.
+          _fetchChats(forceRefresh: true);
+        }
+        _sortChats(); // Re-sort the list
+      });
     });
   }
 
@@ -81,7 +98,12 @@ class _ChatPageState extends State<ChatPage> {
     });
 
     try {
-      final result = await AuthService.fetchUsers(page: isLoadMore ? currentPageUsers + 1 : 1, limit: 10);
+      final result = await AuthService.fetchUsers(
+        page: isLoadMore ? currentPageUsers + 1 : 1,
+        limit: 1000, // Updated limit from 50 to 1000
+        excludeVirtual: true, // CHỈ LẤY NGƯỜI DÙNG THẬT
+      );
+
       if (result['success']) {
         setState(() {
           final newUsers = (result['users'] as List)
@@ -91,11 +113,13 @@ class _ChatPageState extends State<ChatPage> {
             status: userJson['status'] ?? "Available",
             icon: "person.svg",
             isGroup: false,
-            time: "",
-            currentMessage: "",
+            time: "", // This will be updated by lastMessageAt
+            currentMessage: userJson['lastMessageContent'] ?? "", // Use new field
             id: 0,
             profilePictureUrl: userJson['profilePictureUrl'],
             userId: userJson['_id'],
+            lastMessageAt: userJson['lastMessageAt'] != null ? DateTime.parse(userJson['lastMessageAt']) : null, // Parse new field
+            lastMessageContent: userJson['lastMessageContent'] ?? "", // Use new field
           ))
               .where((user) => user.userId != widget.sourchat.userId)
               .toList();
@@ -103,7 +127,7 @@ class _ChatPageState extends State<ChatPage> {
           if (isLoadMore) {
             chats.addAll(newUsers);
           } else {
-            chats.removeWhere((chat) => !chat.isGroup); // Xóa người dùng cũ nếu không load thêm
+            chats.removeWhere((chat) => !chat.isGroup);
             chats.addAll(newUsers);
           }
           currentPageUsers = result['currentPage'];
@@ -146,23 +170,25 @@ class _ChatPageState extends State<ChatPage> {
           final newGroups = (result['groups'] as List)
               .map((groupJson) => ChatModel(
             name: groupJson['name'],
-            email: "", // Nhóm không có email
+            email: "",
             status: groupJson['description'] ?? "Nhóm chat",
             icon: "group.svg",
             isGroup: true,
-            time: "",
-            currentMessage: "",
+            time: "", // This will be updated by lastMessageAt
+            currentMessage: groupJson['lastMessageContent'] ?? "", // Use new field
             id: 0,
             profilePictureUrl: groupJson['profilePictureUrl'],
-            groupId: groupJson['_id'], // Lấy groupId
-            members: groupJson['members'], // Lấy danh sách thành viên
+            groupId: groupJson['_id'],
+            members: groupJson['members'],
+            lastMessageAt: groupJson['lastMessageAt'] != null ? DateTime.parse(groupJson['lastMessageAt']) : null, // Parse new field
+            lastMessageContent: groupJson['lastMessageContent'] ?? "", // Use new field
           ))
               .toList();
 
           if (isLoadMore) {
             chats.addAll(newGroups);
           } else {
-            chats.removeWhere((chat) => chat.isGroup); // Xóa nhóm cũ nếu không load thêm
+            chats.removeWhere((chat) => chat.isGroup);
             chats.addAll(newGroups);
           }
           currentPageGroups = result['currentPage'];
@@ -187,10 +213,14 @@ class _ChatPageState extends State<ChatPage> {
   }
 
   void _sortChats() {
-    // Sắp xếp chats theo thời gian tin nhắn cuối cùng (nếu có) hoặc theo tên
-    // Hiện tại chỉ sắp xếp theo tên để đơn giản
-    chats.sort((a, b) => a.name.compareTo(b.name));
-    filteredChats = chats; // Cập nhật filteredChats
+    chats.sort((a, b) {
+      // Sort by lastMessageAt descending. If null, treat as older.
+      if (a.lastMessageAt == null && b.lastMessageAt == null) return 0;
+      if (a.lastMessageAt == null) return 1; // b is newer
+      if (b.lastMessageAt == null) return -1; // a is newer
+      return b.lastMessageAt!.compareTo(a.lastMessageAt!);
+    });
+    filteredChats = List.from(chats);
   }
 
   @override
@@ -239,8 +269,8 @@ class _ChatPageState extends State<ChatPage> {
                 context,
                 MaterialPageRoute(
                   builder: (context) => IndividualPage(
-                    chatModel: chat, // Truyền chat model đầy đủ
-                    sourchat: widget.sourchat, // Truyền source chat đầy đủ
+                    chatModel: chat,
+                    sourchat: widget.sourchat,
                   ),
                 ),
               );
@@ -251,9 +281,8 @@ class _ChatPageState extends State<ChatPage> {
                 leading: CircleAvatar(
                   radius: 25,
                   backgroundColor: Color(0xFF075E54),
-                  backgroundImage: chat.profilePictureUrl != null && chat.profilePictureUrl!.isNotEmpty
-                      ? NetworkImage(chat.profilePictureUrl!)
-                      : null,
+                  // Đã sửa lỗi: Sử dụng AuthService.getFullImageUrl
+                  backgroundImage: NetworkImage(AuthService.getFullImageUrl(chat.profilePictureUrl)),
                   child: (chat.profilePictureUrl == null || chat.profilePictureUrl!.isEmpty)
                       ? Icon(
                     chat.isGroup ? Icons.group : Icons.person,
@@ -272,7 +301,7 @@ class _ChatPageState extends State<ChatPage> {
                   children: [
                     Expanded(
                       child: Text(
-                        chat.currentMessage.isEmpty ? chat.status : chat.currentMessage, // Hiển thị status nếu không có tin nhắn
+                        chat.lastMessageContent!.isEmpty ? chat.status : chat.lastMessageContent!, // Use lastMessageContent
                         style: TextStyle(
                           fontSize: 13,
                           color: Colors.grey[600],
@@ -283,7 +312,9 @@ class _ChatPageState extends State<ChatPage> {
                   ],
                 ),
                 trailing: Text(
-                  chat.time.isEmpty ? "" : chat.time, // Không hiển thị thời gian nếu không có
+                  chat.lastMessageAt != null
+                      ? '${chat.lastMessageAt!.hour}:${chat.lastMessageAt!.minute.toString().padLeft(2, '0')}' // Format time
+                      : "",
                   style: TextStyle(
                     fontSize: 12,
                     color: Colors.grey,
@@ -300,7 +331,7 @@ class _ChatPageState extends State<ChatPage> {
   @override
   void dispose() {
     _scrollController.dispose();
-    AuthService.getSocket().off("new_group_chat"); // Hủy đăng ký sự kiện
+    AuthService.getSocket().off("chat_list_update");
     super.dispose();
   }
 }

@@ -18,19 +18,7 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateMixin {
   late TabController _tabController;
   Map<String, dynamic>? userData;
-
-  ChatModel sourceChat = ChatModel(
-    name: "You",
-    icon: "person.svg",
-    isGroup: false,
-    time: "",
-    currentMessage: "",
-    status: "Online",
-    id: 0,
-    email: "",
-    profilePictureUrl: null,
-    userId: null, // THÊM TRƯỜNG NÀY
-  );
+  ChatModel? sourceChat;
 
   @override
   void initState() {
@@ -44,11 +32,20 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     if (result['success']) {
       setState(() {
         userData = result['user'];
-        sourceChat.email = userData!['email'];
-        sourceChat.name = userData!['name'];
-        sourceChat.status = userData!['status'];
-        sourceChat.profilePictureUrl = userData!['profilePictureUrl'];
-        sourceChat.userId = userData!['_id']; // Lấy userId từ backend
+        sourceChat = ChatModel(
+          name: userData!['name'] ?? "You",
+          icon: "person.svg",
+          isGroup: false,
+          time: "",
+          currentMessage: "",
+          status: userData!['status'] ?? "Online",
+          id: 0,
+          email: userData!['email'],
+          profilePictureUrl: userData!['profilePictureUrl'],
+          userId: userData!['_id'],
+          lastMessageAt: DateTime.now(),
+          lastMessageContent: "",
+        );
       });
       AuthService.getSocket().connect();
       AuthService.getSocket().emit("signin", userData!['email']);
@@ -81,7 +78,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         ],
       ),
     );
-
     if (confirm == true) {
       await AuthService.logout();
       Navigator.pushAndRemoveUntil(
@@ -94,6 +90,12 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
 
   @override
   Widget build(BuildContext context) {
+    // Lấy chiều rộng màn hình hiện tại
+    final screenWidth = MediaQuery.of(context).size.width;
+    // Định nghĩa ngưỡng cho màn hình lớn (ví dụ: tablet hoặc điện thoại gập)
+    // Bạn có thể điều chỉnh ngưỡng này tùy theo thiết kế mong muốn
+    final bool isLargeScreen = screenWidth > 600; // Ví dụ: > 600 logical pixels
+
     return Scaffold(
       appBar: AppBar(
         title: Text("WhatsApp NDT"),
@@ -155,10 +157,10 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                     ],
                   ),
                 ),
-              ];
-            },
-          ),
-        ],
+              ]; // Đã sửa: Đóng danh sách PopupMenuItem bằng ];
+            }, // Đóng itemBuilder
+          ), // Đóng PopupMenuButton
+        ], // Đóng danh sách actions
         bottom: TabBar(
           controller: _tabController,
           labelColor: Colors.white,
@@ -172,34 +174,52 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           ],
         ),
       ),
-      body: userData == null
+      body: sourceChat == null // Kiểm tra nếu sourceChat là null
           ? Center(
         child: CircularProgressIndicator(),
       )
-          : TabBarView(
-        controller: _tabController,
-        children: [
-          CameraPage(),
-          ChatPage(
-            sourchat: sourceChat, // Chỉ truyền sourceChat
-          ),
-          StatusPage(sourceUserId: sourceChat.userId!), // Truyền userId
-          CallPage(sourceUserId: sourceChat.userId!), // Truyền userId
-        ],
+          : LayoutBuilder(
+        builder: (context, constraints) {
+          final double contentWidth = isLargeScreen ? 700.0 : constraints.maxWidth;
+
+          return Center(
+            child: SizedBox(
+              width: contentWidth,
+              child: TabBarView(
+                controller: _tabController,
+                children: [
+                  CameraPage(),
+                  ChatPage(
+                    sourchat: sourceChat!, // Sử dụng toán tử null-check ở đây
+                  ),
+                  StatusPage(sourceUserId: sourceChat!.userId!), // Sử dụng toán tử null-check ở đây
+                  CallPage(sourceUserId: sourceChat!.userId!), // Sử dụng toán tử null-check ở đây
+                ],
+              ),
+            ),
+          );
+        },
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (context) => ContactsPage(
-              sourceUserEmail: userData!['email'],
-              sourceUserId: userData!['_id'], // Truyền userId của mình
-            )),
-          );
+          if (userData != null && sourceChat != null) {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => ContactsPage(
+                sourceUserEmail: userData!['email'],
+                sourceUserId: userData!['_id'],
+              )),
+            );
+          }
         },
         backgroundColor: Color(0xFF075E54),
         child: Icon(Icons.chat, color: Colors.white),
       ),
+      // Có thể điều chỉnh vị trí FAB cho màn hình lớn hơn nếu cần
+      // Ví dụ: FloatingActionButtonLocation.centerFloat hoặc FloatingActionButtonLocation.endDocked
+      floatingActionButtonLocation: isLargeScreen
+          ? FloatingActionButtonLocation.endFloat // Giữ nguyên hoặc thay đổi
+          : FloatingActionButtonLocation.endFloat, // Mặc định
     );
   }
 

@@ -2,12 +2,11 @@ import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
 import '../models/chat_model.dart';
 import 'individual_page.dart';
-import 'create_group_screen.dart'; // THÊM DÒNG NÀY
+import 'create_group_screen.dart';
 
 class ContactsPage extends StatefulWidget {
   final String sourceUserEmail;
-  final String sourceUserId; // THÊM TRƯỜNG NÀY
-
+  final String sourceUserId;
   const ContactsPage({Key? key, required this.sourceUserEmail, required this.sourceUserId}) : super(key: key);
 
   @override
@@ -20,7 +19,6 @@ class _ContactsPageState extends State<ContactsPage> {
   bool isLoading = true;
   String errorMessage = "";
   TextEditingController searchController = TextEditingController();
-
   int currentPage = 1;
   int totalPages = 1;
   bool isFetchingMore = false;
@@ -32,7 +30,12 @@ class _ContactsPageState extends State<ContactsPage> {
     searchController.addListener(_filterUsers);
   }
 
-  Future<void> _fetchUsers({bool isLoadMore = false}) async {
+  // Đã sửa lỗi: Thêm tham số forceRefresh vào định nghĩa hàm
+  Future<void> _fetchUsers({bool isLoadMore = false, bool forceRefresh = false}) async {
+    if (forceRefresh) {
+      users.clear();
+      currentPage = 1;
+    }
     if (isLoadMore && currentPage >= totalPages) return;
 
     setState(() {
@@ -45,7 +48,12 @@ class _ContactsPageState extends State<ContactsPage> {
     });
 
     try {
-      final result = await AuthService.fetchUsers(page: isLoadMore ? currentPage + 1 : 1, limit: 10);
+      final result = await AuthService.fetchUsers(
+        page: isLoadMore ? currentPage + 1 : 1,
+        limit: 1000, // Updated limit from 50 to 1000
+        excludeVirtual: true, // CHỈ LẤY NGƯỜI DÙNG THẬT
+      );
+
       if (result['success']) {
         setState(() {
           final newUsers = (result['users'] as List)
@@ -59,16 +67,18 @@ class _ContactsPageState extends State<ContactsPage> {
             currentMessage: "",
             id: 0,
             profilePictureUrl: userJson['profilePictureUrl'],
-            userId: userJson['_id'], // Lấy userId từ backend
+            userId: userJson['_id'],
           ))
               .toList();
 
-          if (isLoadMore) {
+          if (isLoadMore || forceRefresh) { // Thêm forceRefresh vào điều kiện này
             users.addAll(newUsers);
           } else {
             users = newUsers;
           }
-          _filterUsers();
+          currentPage = result['currentPage'];
+          totalPages = result['totalPages'];
+          _filterUsers(); // Áp dụng bộ lọc tìm kiếm sau khi tải người dùng
         });
       } else {
         setState(() {
@@ -106,7 +116,7 @@ class _ContactsPageState extends State<ContactsPage> {
         foregroundColor: Colors.white,
         actions: [
           IconButton(
-            icon: Icon(Icons.group_add), // Icon tạo nhóm
+            icon: Icon(Icons.group_add),
             onPressed: () async {
               final result = await Navigator.push(
                 context,
@@ -118,11 +128,10 @@ class _ContactsPageState extends State<ContactsPage> {
                 ),
               );
               if (result == true) {
-                // Nếu nhóm được tạo thành công, có thể làm mới danh sách chat
-                // hoặc hiển thị thông báo
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(content: Text("Nhóm đã được tạo thành công!")),
                 );
+                _fetchUsers(forceRefresh: true); // Lời gọi hàm đã được sửa
               }
             },
           ),
@@ -186,9 +195,8 @@ class _ContactsPageState extends State<ContactsPage> {
                       status: "Online",
                       id: 0,
                       profilePictureUrl: null,
-                      userId: widget.sourceUserId, // Truyền userId của mình
+                      userId: widget.sourceUserId,
                     );
-
                     Navigator.push(
                       context,
                       MaterialPageRoute(
@@ -202,9 +210,7 @@ class _ContactsPageState extends State<ContactsPage> {
                   child: ListTile(
                     leading: CircleAvatar(
                       backgroundColor: Color(0xFF075E54),
-                      backgroundImage: user.profilePictureUrl != null && user.profilePictureUrl!.isNotEmpty
-                          ? NetworkImage(user.profilePictureUrl!)
-                          : null,
+                      backgroundImage: NetworkImage(AuthService.getFullImageUrl(user.profilePictureUrl)),
                       child: (user.profilePictureUrl == null || user.profilePictureUrl!.isEmpty)
                           ? Text(
                         user.name[0].toUpperCase(),

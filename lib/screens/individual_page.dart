@@ -32,7 +32,6 @@ class _IndividualPageState extends State<IndividualPage> {
   bool isTargetTyping = false; // Cho cá nhân
   Map<String, bool> groupTypingStatus = {}; // Cho nhóm: userId -> isTyping
   final ScrollController _scrollController = ScrollController();
-
   int currentPage = 1;
   int totalPages = 1;
   bool isFetchingMoreMessages = false;
@@ -66,7 +65,6 @@ class _IndividualPageState extends State<IndividualPage> {
     socket.on("message", (data) {
       print("Received message: $data");
       final newMessage = MessageModel.fromJson(data, widget.sourchat.email);
-
       // Chỉ thêm tin nhắn nếu nó thuộc về cuộc trò chuyện hiện tại
       bool isForThisChat = false;
       if (widget.chatModel.isGroup && newMessage.groupId == widget.chatModel.groupId) {
@@ -79,14 +77,13 @@ class _IndividualPageState extends State<IndividualPage> {
 
       if (isForThisChat) {
         setState(() {
-          messages.insert(0, newMessage); // Thêm tin nhắn mới vào đầu danh sách
+          messages.add(newMessage); // Đã sửa: Thêm tin nhắn mới vào cuối danh sách
         });
         _scrollController.animateTo(
-          0.0,
+          _scrollController.position.maxScrollExtent, // Đã sửa: Cuộn xuống cuối
           duration: Duration(milliseconds: 300),
           curve: Curves.easeOut,
         );
-
         // Nếu tin nhắn nhận được là của người khác và đang hiển thị, đánh dấu là đã đọc
         if (newMessage.sourceEmail != widget.sourchat.email && newMessage.id != null) {
           AuthService.markMessagesAsRead([newMessage.id!]);
@@ -107,7 +104,6 @@ class _IndividualPageState extends State<IndividualPage> {
         final typingUserEmail = data['userEmail'];
         final typingGroupId = data['groupId'];
         final isTyping = data['isTyping'];
-
         if (typingGroupId == widget.chatModel.groupId && typingUserEmail != widget.sourchat.email) {
           setState(() {
             groupTypingStatus[typingUserEmail] = isTyping;
@@ -147,7 +143,6 @@ class _IndividualPageState extends State<IndividualPage> {
     });
 
     final String chatId = widget.chatModel.isGroup ? widget.chatModel.groupId! : widget.chatModel.userId!;
-
     final result = await AuthService.fetchMessages(
       chatId,
       page: isLoadMore ? currentPage + 1 : 1,
@@ -165,6 +160,7 @@ class _IndividualPageState extends State<IndividualPage> {
             .where((msg) => msg.sourceEmail != widget.sourchat.email && msg.status != "read" && msg.id != null)
             .map((msg) => msg.id!)
             .toList();
+
         if (messagesToMarkAsRead.isNotEmpty) {
           AuthService.markMessagesAsRead(messagesToMarkAsRead);
           // Cập nhật trạng thái trong UI
@@ -189,6 +185,7 @@ class _IndividualPageState extends State<IndividualPage> {
         SnackBar(content: Text("Không thể tải tin nhắn: ${result['message']}")),
       );
     }
+
     setState(() {
       isFetchingMoreMessages = false;
     });
@@ -223,7 +220,7 @@ class _IndividualPageState extends State<IndividualPage> {
     });
 
     setState(() {
-      messages.insert(0, tempMessage); // Thêm vào đầu danh sách
+      messages.add(tempMessage); // Đã sửa: Thêm vào cuối danh sách
     });
     _controller.clear();
 
@@ -246,7 +243,7 @@ class _IndividualPageState extends State<IndividualPage> {
       });
     }
     _scrollController.animateTo(
-      0.0,
+      _scrollController.position.maxScrollExtent, // Đã sửa: Cuộn xuống cuối
       duration: Duration(milliseconds: 300),
       curve: Curves.easeOut,
     );
@@ -256,7 +253,6 @@ class _IndividualPageState extends State<IndividualPage> {
     setState(() {
       showEmojiPicker = !showEmojiPicker;
     });
-
     if (showEmojiPicker) {
       FocusScope.of(context).unfocus();
     }
@@ -378,7 +374,6 @@ class _IndividualPageState extends State<IndividualPage> {
       );
       return;
     }
-
     try {
       Position position = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
       final locationMessage = "Vị trí của tôi: Lat ${position.latitude}, Lon ${position.longitude}";
@@ -726,16 +721,15 @@ class _IndividualPageState extends State<IndividualPage> {
               ),
               child: ListView.builder(
                 controller: _scrollController,
-                reverse: true,
+                reverse: false, // Đã sửa: Hiển thị tin nhắn theo thứ tự bình thường
                 padding: EdgeInsets.all(10),
                 itemCount: messages.length + (isFetchingMoreMessages ? 1 : 0),
                 itemBuilder: (context, index) {
                   if (index == messages.length && isFetchingMoreMessages) {
                     return Center(child: CircularProgressIndicator());
                   }
-                  final message = messages[index]; // Lấy tin nhắn từ đầu danh sách
+                  final message = messages[index]; // Lấy tin nhắn từ danh sách
                   final isMe = message.isMe;
-
                   return Align(
                     alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
                     child: Container(
@@ -793,7 +787,6 @@ class _IndividualPageState extends State<IndividualPage> {
               ),
             ),
           ),
-
           Container(
             padding: EdgeInsets.all(10),
             color: Colors.white,
@@ -874,7 +867,6 @@ class _IndividualPageState extends State<IndividualPage> {
               ],
             ),
           ),
-
           if (showEmojiPicker)
             Container(
               height: 250,

@@ -1,196 +1,192 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import 'package:whatsappndt1/screens/home_screen.dart';
+import 'package:whatsappndt1/services/auth_service.dart';
+
 import '../services/auth_service.dart';
-import 'home_screen.dart';
+import 'home_screen.dart'; // Import AuthService
 
 class OtpScreen extends StatefulWidget {
   final String email;
-  final String? testOtp;
+  final String? testOtp; // Thêm trường này để nhận test OTP nếu có
 
-  const OtpScreen({
-    Key? key,
-    required this.email,
-    this.testOtp,
-  }) : super(key: key);
+  const OtpScreen({super.key, required this.email, this.testOtp});
 
   @override
-  _OtpScreenState createState() => _OtpScreenState();
+  State<OtpScreen> createState() => _OtpScreenState();
 }
 
 class _OtpScreenState extends State<OtpScreen> {
-  List<TextEditingController> otpControllers = List.generate(6, (i) => TextEditingController());
+  TextEditingController otpController = TextEditingController();
   bool isLoading = false;
-  bool isResending = false;
+  String? errorMessage;
 
   @override
   void initState() {
     super.initState();
     if (widget.testOtp != null) {
-      Future.delayed(Duration(milliseconds: 500), () {
-        for (int i = 0; i < widget.testOtp!.length && i < 6; i++) {
-          otpControllers[i].text = widget.testOtp![i];
-        }
+      otpController.text = widget.testOtp!; // Tự động điền test OTP nếu có
+    }
+  }
+
+  Future<void> _verifyOtp() async {
+    setState(() {
+      isLoading = true;
+      errorMessage = null;
+    });
+
+    final otp = otpController.text.trim();
+    if (otp.isEmpty) {
+      setState(() {
+        errorMessage = "Vui lòng nhập OTP.";
+        isLoading = false;
+      });
+      return;
+    }
+
+    try {
+      final result = await AuthService.verifyOTP(widget.email, otp); // Đã sửa lỗi: verifyOTP
+      if (result['success']) {
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(builder: (context) => HomeScreen()),
+              (route) => false,
+        );
+      } else {
+        setState(() {
+          errorMessage = result['message'] ?? "Xác thực OTP thất bại.";
+        });
+      }
+    } catch (e) {
+      setState(() {
+        errorMessage = "Lỗi kết nối: $e";
+      });
+    } finally {
+      setState(() {
+        isLoading = false;
       });
     }
   }
 
-  String _getOTP() {
-    return otpControllers.map((c) => c.text).join();
-  }
-
-  Future<void> _verifyOTP() async {
-    final otp = _getOTP();
-    if (otp.length != 6) {
-      _showMessage("Nhập đủ 6 số!", true);
-      return;
-    }
-
-    setState(() => isLoading = true);
+  Future<void> _resendOtp() async {
+    setState(() {
+      isLoading = true;
+      errorMessage = null;
+    });
 
     try {
-      final result = await AuthService.verifyOTP(
-        widget.email,
-        "",
-        otp,
-      );
-
+      final result = await AuthService.sendOTP(widget.email); // Đã sửa lỗi: sendOTP
       if (result['success']) {
-        _showMessage("Xác thực thành công!", false);
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (context) => HomeScreen()),
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("OTP mới đã được gửi!")),
         );
       } else {
-        _showMessage(result['message'], true);
-        _clearOTP();
+        setState(() {
+          errorMessage = result['message'] ?? "Gửi lại OTP thất bại.";
+        });
       }
     } catch (e) {
-      _showMessage("Lỗi: $e", true);
+      setState(() {
+        errorMessage = "Lỗi kết nối: $e";
+      });
     } finally {
-      setState(() => isLoading = false);
+      setState(() {
+        isLoading = false;
+      });
     }
-  }
-
-  Future<void> _resendOTP() async {
-    setState(() => isResending = true);
-    try {
-      final result = await AuthService.sendOTP(widget.email);
-      if (result['success']) {
-        _showMessage("Mã OTP mới đã được gửi đến email của bạn!", false);
-        _clearOTP(); // Xóa OTP cũ để người dùng nhập lại
-      } else {
-        _showMessage(result['message'], true);
-      }
-    } catch (e) {
-      _showMessage("Lỗi khi gửi lại OTP: $e", true);
-    } finally {
-      setState(() => isResending = false);
-    }
-  }
-
-  void _clearOTP() {
-    for (var controller in otpControllers) {
-      controller.clear();
-    }
-  }
-
-  void _showMessage(String message, bool isError) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: isError ? Colors.red : Colors.green,
-      ),
-    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text("Xác thực OTP"),
-        backgroundColor: Color(0xFF075E54),
+        title: const Text('Xác thực OTP'),
+        backgroundColor: const Color(0xFF075E54),
         foregroundColor: Colors.white,
       ),
-      body: Padding(
-        padding: EdgeInsets.all(20),
-        child: Column(
-          children: [
-            SizedBox(height: 50),
-
-            Text(
-              "Nhập mã OTP",
-              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-            ),
-
-            SizedBox(height: 10),
-
-            Text("Gửi đến: ${widget.email}"),
-
-            SizedBox(height: 40),
-
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: List.generate(6, (index) {
-                return Container(
-                  width: 45,
-                  height: 55,
-                  decoration: BoxDecoration(
-                    border: Border.all(color: Colors.grey[300]!),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: TextField(
-                    controller: otpControllers[index],
-                    textAlign: TextAlign.center,
-                    keyboardType: TextInputType.number,
-                    maxLength: 1,
-                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                    decoration: InputDecoration(
-                      counterText: "",
-                      border: InputBorder.none,
-                    ),
-                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                    onChanged: (value) {
-                      if (value.isNotEmpty && index < 5) {
-                        FocusScope.of(context).nextFocus();
-                      }
-                      if (_getOTP().length == 6) {
-                        _verifyOTP();
-                      }
-                    },
-                  ),
-                );
-              }),
-            ),
-
-            SizedBox(height: 40),
-
-            SizedBox(
-              width: double.infinity,
-              height: 50,
-              child: ElevatedButton(
-                onPressed: isLoading ? null : _verifyOTP,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Color(0xFF075E54),
-                  foregroundColor: Colors.white,
+      body: Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Text(
+                'Nhập mã OTP đã gửi đến email của bạn',
+                style: TextStyle(
+                  fontSize: 18,
+                  color: Colors.grey,
                 ),
-                child: isLoading
-                    ? CircularProgressIndicator(color: Colors.white)
-                    : Text("Xác thực"),
+                textAlign: TextAlign.center,
               ),
-            ),
-            SizedBox(height: 20),
-            TextButton(
-              onPressed: isResending ? null : _resendOTP,
-              child: isResending
-                  ? CircularProgressIndicator(strokeWidth: 2)
-                  : Text(
-                "Gửi lại OTP",
-                style: TextStyle(color: Color(0xFF075E54)),
+              const SizedBox(height: 32),
+              TextField(
+                controller: otpController,
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(
+                  labelText: 'Mã OTP',
+                  hintText: '123456',
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  prefixIcon: const Icon(Icons.vpn_key),
+                ),
               ),
-            ),
-          ],
+              if (errorMessage != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 16.0),
+                  child: Text(
+                    errorMessage!,
+                    style: const TextStyle(color: Colors.red),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              const SizedBox(height: 24),
+              isLoading
+                  ? const CircularProgressIndicator(
+                valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF075E54)),
+              )
+                  : Column(
+                children: [
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: _verifyOtp,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF075E54),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: const Text(
+                        'Xác thực OTP',
+                        style: TextStyle(fontSize: 18),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  TextButton(
+                    onPressed: _resendOtp,
+                    child: const Text(
+                      'Gửi lại OTP',
+                      style: TextStyle(
+                        fontSize: 16,
+                        color: Color(0xFF075E54),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
+  }
+
+  @override
+  void dispose() {
+    otpController.dispose();
+    super.dispose();
   }
 }

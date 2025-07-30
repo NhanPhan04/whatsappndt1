@@ -16,6 +16,7 @@ class CreateGroupScreen extends StatefulWidget {
 
 class _CreateGroupScreenState extends State<CreateGroupScreen> {
   TextEditingController groupNameController = TextEditingController();
+  TextEditingController groupDescriptionController = TextEditingController(); // Thêm controller cho mô tả
   TextEditingController searchController = TextEditingController();
   List<ChatModel> allUsers = [];
   List<ChatModel> filteredUsers = [];
@@ -113,11 +114,9 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
       _showSnackBar("Vui lòng chọn ít nhất một thành viên.", isError: true);
       return;
     }
-
     setState(() {
       isCreatingGroup = true;
     });
-
     String? groupImageUrl;
     if (_groupImage != null) {
       _showSnackBar("Đang tải ảnh nhóm lên...", isError: false);
@@ -132,14 +131,14 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
         return;
       }
     }
-
     List<String> memberIds = selectedMembers.map((m) => m.userId!).toList();
     memberIds.add(widget.sourceUserId); // Thêm người tạo vào danh sách thành viên
 
     final result = await AuthService.createGroup(
       groupNameController.text.trim(),
       memberIds,
-      profilePictureUrl: groupImageUrl,
+      groupDescriptionController.text.trim().isEmpty ? null : groupDescriptionController.text.trim(), // Truyền mô tả
+      groupImageUrl, // Truyền URL ảnh nhóm
     );
 
     if (result['success']) {
@@ -148,7 +147,6 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
     } else {
       _showSnackBar("Tạo nhóm thất bại: ${result['message']}", isError: true);
     }
-
     setState(() {
       isCreatingGroup = false;
     });
@@ -201,6 +199,18 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
                     ),
                     contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   ),
+                ),
+                SizedBox(height: 10),
+                TextField(
+                  controller: groupDescriptionController, // Thêm TextField cho mô tả
+                  decoration: InputDecoration(
+                    hintText: "Mô tả nhóm (Tùy chọn)",
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  ),
+                  maxLines: 2,
                 ),
                 SizedBox(height: 10),
                 TextField(
@@ -311,6 +321,7 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
   @override
   void dispose() {
     groupNameController.dispose();
+    groupDescriptionController.dispose(); // Dispose controller
     searchController.dispose();
     super.dispose();
   }

@@ -15,10 +15,16 @@ const statusSchema = new mongoose.Schema(
     content: {
       type: String, // Nội dung văn bản cho trạng thái text
       default: "",
+      required: function () {
+        return this.type === "text"
+      },
     },
     mediaUrl: {
       type: String, // URL cho ảnh hoặc video
       default: "",
+      required: function () {
+        return this.type === "image" || this.type === "video"
+      },
     },
     viewedBy: [
       {

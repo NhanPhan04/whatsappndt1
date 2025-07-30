@@ -1,16 +1,18 @@
 class ChatModel {
-  String name;
-  String icon;
-  bool isGroup;
-  String time;
+  final String name;
+  final String icon;
+  final bool isGroup;
+  final String time;
+  final String email;
   String currentMessage;
   String status;
   int id;
-  String email;
   String? profilePictureUrl;
-  String? userId; // THÊM TRƯỜNG NÀY để lưu _id từ MongoDB
-  String? groupId; // THÊM TRƯỜNG NÀY để lưu _id của nhóm
-  List<dynamic>? members; // THÊM TRƯỜNG NÀY để lưu thành viên nhóm
+  String? userId; // For individual chats
+  String? groupId; // For group chats
+  List<dynamic>? members; // For group chats
+  DateTime? lastMessageAt; // New field
+  String? lastMessageContent; // New field
 
   ChatModel({
     required this.name,
@@ -22,8 +24,10 @@ class ChatModel {
     required this.id,
     required this.email,
     this.profilePictureUrl,
-    this.userId, // Cho phép null
-    this.groupId, // Cho phép null
-    this.members, // Cho phép null
+    this.userId,
+    this.groupId,
+    this.members,
+    this.lastMessageAt, // New
+    this.lastMessageContent, // New
   });
 }

@@ -4,7 +4,6 @@ import 'package:timeago/timeago.dart' as timeago;
 
 class CallPage extends StatefulWidget {
   final String sourceUserId;
-
   const CallPage({Key? key, required this.sourceUserId}) : super(key: key);
 
   @override
@@ -17,12 +16,10 @@ class _CallPageState extends State<CallPage> {
   List<dynamic> filteredCallHistory = [];
   bool isLoading = true;
   String errorMessage = "";
-
   int currentPage = 1;
   int totalPages = 1;
   bool isFetchingMore = false;
-
-  String? selectedCallTypeFilter; // "incoming", "outgoing", "missed"
+  String? selectedCallTypeFilter; // "incoming", "outgoing", "missed", "answered", "declined"
   String? selectedDateFilter; // "today", "yesterday", "last7days"
 
   @override
@@ -48,10 +45,9 @@ class _CallPageState extends State<CallPage> {
       final result = await AuthService.fetchCalls(
         page: isLoadMore ? currentPage + 1 : 1,
         limit: 10,
-        type: selectedCallTypeFilter,
-        date: selectedDateFilter,
+        filterType: selectedCallTypeFilter,
+        filterDate: selectedDateFilter,
       );
-
       if (result['success']) {
         setState(() {
           final newCalls = result['calls'];
@@ -93,21 +89,36 @@ class _CallPageState extends State<CallPage> {
     });
   }
 
-  Icon _getCallStatusIcon(String status, String callType, String participantId) {
-    bool isMyCall = participantId == widget.sourceUserId; // Là cuộc gọi của mình (người gọi hoặc người nhận)
+  Icon _getCallStatusIcon(String callStatus, String callType) { // Removed participantId
+    IconData iconData;
+    Color iconColor;
 
-    if (status == 'missed') {
-      return Icon(Icons.call_missed, color: Colors.red, size: 18);
-    } else if (status == 'incoming') {
-      return Icon(Icons.call_received, color: Colors.green, size: 18);
-    } else if (status == 'outgoing') {
-      return Icon(Icons.call_made, color: Colors.green, size: 18);
-    } else if (status == 'answered') {
-      return Icon(Icons.call, color: Colors.green, size: 18);
-    } else if (status == 'declined') {
-      return Icon(Icons.call_end, color: Colors.red, size: 18);
+    switch (callStatus) {
+      case 'missed':
+        iconData = Icons.call_missed;
+        iconColor = Colors.red;
+        break;
+      case 'declined':
+        iconData = Icons.call_end;
+        iconColor = Colors.red;
+        break;
+      case 'incoming':
+        iconData = Icons.call_received;
+        iconColor = Colors.green;
+        break;
+      case 'outgoing':
+        iconData = Icons.call_made;
+        iconColor = Colors.green;
+        break;
+      case 'answered':
+        iconData = Icons.call;
+        iconColor = Colors.green;
+        break;
+      default:
+        iconData = Icons.call;
+        iconColor = Colors.grey;
     }
-    return Icon(Icons.call, color: Colors.grey, size: 18);
+    return Icon(iconData, color: iconColor, size: 18);
   }
 
   @override
@@ -139,8 +150,8 @@ class _CallPageState extends State<CallPage> {
                   onChanged: (String? newValue) {
                     setState(() {
                       selectedCallTypeFilter = newValue;
-                      currentPage = 1; // Reset trang khi thay đổi bộ lọc
-                      callHistory.clear(); // Xóa dữ liệu cũ
+                      currentPage = 1;
+                      callHistory.clear();
                     });
                     _fetchCalls();
                   },
@@ -224,13 +235,11 @@ class _CallPageState extends State<CallPage> {
                 final isCaller = call['caller']['_id'] == widget.sourceUserId;
                 final participant = isCaller ? call['receiver'] : call['caller'];
                 final callStatus = call['callStatus'];
-
                 return ListTile(
                   leading: CircleAvatar(
                     backgroundColor: Color(0xFF075E54),
-                    backgroundImage: participant['profilePictureUrl'] != null && participant['profilePictureUrl'].isNotEmpty
-                        ? NetworkImage(participant['profilePictureUrl'])
-                        : null,
+                    // Đã sửa lỗi: Sử dụng AuthService.getFullImageUrl
+                    backgroundImage: NetworkImage(AuthService.getFullImageUrl(participant['profilePictureUrl'])),
                     child: (participant['profilePictureUrl'] == null || participant['profilePictureUrl'].isEmpty)
                         ? Icon(Icons.person, color: Colors.white)
                         : null,
@@ -238,7 +247,7 @@ class _CallPageState extends State<CallPage> {
                   title: Text(participant['name'] ?? participant['email']),
                   subtitle: Row(
                     children: [
-                      _getCallStatusIcon(callStatus, call['callType'], isCaller ? call['caller']['_id'] : call['receiver']['_id']),
+                      _getCallStatusIcon(callStatus, call['callType']), // Removed participantId
                       SizedBox(width: 5),
                       Text(timeago.format(DateTime.parse(call['timestamp']))),
                       if (call['duration'] > 0 && callStatus != 'missed' && callStatus != 'declined')

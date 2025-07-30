@@ -60,6 +60,7 @@ mongoose
 
 // Lưu OTP tạm thời
 const otpStorage = new Map()
+
 // Lưu trữ người dùng đang hoạt động (email -> socket.id, userId)
 const activeUsers = new Map() // email -> { socketId: string, userId: ObjectId }
 
@@ -96,7 +97,6 @@ async function verifyToken(req, res, next) {
   if (!token) {
     return res.status(401).json({ success: false, message: "Token không được cung cấp" })
   }
-
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET)
     req.user = decoded // decoded sẽ chứa email và userId
@@ -116,14 +116,12 @@ async function verifyToken(req, res, next) {
 app.post("/api/send-otp", async (req, res) => {
   try {
     const { email } = req.body
-
     if (!email) {
       return res.status(400).json({
         success: false,
         message: "Email là bắt buộc",
       })
     }
-
     if (!email.includes("@") || !email.includes(".")) {
       return res.status(400).json({
         success: false,
@@ -132,7 +130,6 @@ app.post("/api/send-otp", async (req, res) => {
     }
 
     const otp = generateOTP()
-
     if (!transporter) {
       console.error("❌ Nodemailer transporter not initialized")
       return res.status(500).json({
@@ -146,7 +143,6 @@ app.post("/api/send-otp", async (req, res) => {
       expiresAt: Date.now() + 5 * 60 * 1000,
       attempts: 0,
     })
-
     console.log(`🔐 Generated OTP: ${otp} for ${email}`)
 
     try {
@@ -155,17 +151,16 @@ app.post("/api/send-otp", async (req, res) => {
         to: email,
         subject: "Mã xác thực WhatsApp NDT của bạn",
         html: `
-          <div style="font-family: Arial, sans-serif; line-height: 1.6;">
-            <h2>Mã xác thực WhatsApp NDT của bạn</h2>
-            <p>Mã OTP của bạn là: <strong>${otp}</strong></p>
-            <p>Mã này có hiệu lực trong 5 phút.</p>
-            <p>Nếu bạn không yêu cầu mã này, vui lòng bỏ qua email này.</p>
-            <p>Trân trọng,</p>
-            <p>Đội ngũ WhatsApp NDT</p>
-          </div>
-        `,
+<div style="font-family: Arial, sans-serif; line-height: 1.6;">
+  <h2>Mã xác thực WhatsApp NDT của bạn</h2>
+  <p>Mã OTP của bạn là: <strong>${otp}</strong></p>
+  <p>Mã này có hiệu lực trong 5 phút.</p>
+  <p>Nếu bạn không yêu cầu mã này, vui lòng bỏ qua email này.</p>
+  <p>Trân trọng,</p>
+  <p>Đội ngũ WhatsApp NDT</p>
+</div>
+`,
       })
-
       console.log(`✅ OTP email sent successfully to: ${email}`)
       res.json({ success: true, message: "OTP đã được gửi đến email của bạn!" })
     } catch (emailError) {
@@ -191,7 +186,6 @@ app.post("/api/send-otp", async (req, res) => {
 app.post("/api/verify-otp", async (req, res) => {
   try {
     const { email, otp } = req.body
-
     if (!email || !otp) {
       return res.status(400).json({
         success: false,
@@ -200,7 +194,6 @@ app.post("/api/verify-otp", async (req, res) => {
     }
 
     const stored = otpStorage.get(email)
-
     if (!stored) {
       return res.status(400).json({ success: false, message: "OTP không tồn tại hoặc đã hết hạn" })
     }
@@ -222,7 +215,6 @@ app.post("/api/verify-otp", async (req, res) => {
     otpStorage.delete(email)
 
     let user = await User.findOne({ email: email })
-
     if (!user) {
       user = new User({ email: email, verified: true })
       await user.save()
@@ -235,7 +227,6 @@ app.post("/api/verify-otp", async (req, res) => {
     }
 
     const token = generateToken(user.email, user._id) // Truyền userId vào token
-
     res.json({
       success: true,
       message: "Xác thực thành công!",
@@ -260,7 +251,6 @@ app.post("/api/verify-otp", async (req, res) => {
 app.post("/api/test-otp", (req, res) => {
   try {
     const { email } = req.body
-
     if (!email) {
       return res.status(400).json({
         success: false,
@@ -269,13 +259,11 @@ app.post("/api/test-otp", (req, res) => {
     }
 
     const testOtp = "123456"
-
     otpStorage.set(email, {
       otp: testOtp,
       expiresAt: Date.now() + 5 * 60 * 1000,
       attempts: 0,
     })
-
     console.log(`🧪 Test OTP: ${testOtp} for ${email}`)
     res.json({ success: true, message: "Test OTP tạo thành công", testOtp, email })
   } catch (error) {
@@ -316,7 +304,6 @@ app.post("/api/profile/update", verifyToken, async (req, res) => {
     if (profilePictureUrl !== undefined) user.profilePictureUrl = profilePictureUrl
 
     await user.save()
-
     res.json({
       success: true,
       message: "Cập nhật hồ sơ thành công",
@@ -342,16 +329,42 @@ app.get("/api/users", verifyToken, async (req, res) => {
     const currentUserId = req.user.userId
     const page = Number.parseInt(req.query.page) || 1
     const limit = Number.parseInt(req.query.limit) || 10
-
     const skip = (page - 1) * limit
+    const isVirtualOnly = req.query.isVirtual === "true" // Lấy tham số isVirtual (chỉ lấy ảo)
+    const excludeVirtual = req.query.excludeVirtual === "true" // Lấy tham số excludeVirtual (loại trừ ảo)
+    const searchQuery = req.query.search
 
-    const users = await User.find({ _id: { $ne: currentUserId } })
-      .select("email name status profilePictureUrl")
+    const conditions = [{ _id: { $ne: currentUserId } }]
+
+    // Logic lọc người dùng:
+    if (isVirtualOnly) {
+      // Nếu yêu cầu chỉ lấy người dùng ảo
+      conditions.push({ email: /^user.*@example\.com$/i })
+    } else if (excludeVirtual) {
+      // Nếu yêu cầu loại trừ người dùng ảo
+      conditions.push({ email: { $not: /^user.*@example\.com$/i } })
+    }
+    // Nếu cả isVirtualOnly và excludeVirtual đều false, sẽ lấy tất cả người dùng (trừ người dùng hiện tại)
+
+    // Nếu có searchQuery, thêm điều kiện tìm kiếm theo tên hoặc email
+    if (searchQuery) {
+      conditions.push({
+        $or: [
+          { name: { $regex: searchQuery, $options: "i" } }, // Tìm kiếm không phân biệt chữ hoa chữ thường trong tên
+          { email: { $regex: searchQuery, $options: "i" } }, // Tìm kiếm không phân biệt chữ hoa chữ thường trong email
+        ],
+      })
+    }
+
+    const query = conditions.length > 0 ? { $and: conditions } : {} // Kết hợp tất cả các điều kiện bằng $and
+
+    const users = await User.find(query)
+      .select("email name status profilePictureUrl lastMessageAt lastMessageContent") // Added new fields
+      .sort({ lastMessageAt: -1 }) // Sort by lastMessageAt descending
       .skip(skip)
       .limit(limit)
 
-    const totalUsers = await User.countDocuments({ _id: { $ne: currentUserId } })
-
+    const totalUsers = await User.countDocuments(query) // Đảm bảo countDocuments cũng dùng query đã lọc
     res.json({
       success: true,
       users: users,
@@ -388,7 +401,6 @@ app.get("/api/messages/:chatId", verifyToken, async (req, res) => {
     const chatId = req.params.chatId // Có thể là targetUserId hoặc groupId
     const page = Number.parseInt(req.query.page) || 1
     const limit = Number.parseInt(req.query.limit) || 30
-
     const skip = (page - 1) * limit
 
     let messagesQuery
@@ -396,14 +408,12 @@ app.get("/api/messages/:chatId", verifyToken, async (req, res) => {
 
     // Kiểm tra xem chatId có phải là ID của một nhóm không
     const group = await GroupChat.findById(chatId)
-
     if (group) {
       // Đây là tin nhắn nhóm
       // Đảm bảo người dùng hiện tại là thành viên của nhóm
       if (!group.members.includes(currentUserId)) {
         return res.status(403).json({ success: false, message: "Bạn không phải là thành viên của nhóm này." })
       }
-
       messagesQuery = Message.find({ group: chatId })
       totalMessagesQuery = Message.countDocuments({ group: chatId })
     } else {
@@ -497,6 +507,7 @@ app.post("/api/status", verifyToken, async (req, res) => {
     })
 
     await newStatus.save()
+
     res.json({ success: true, message: "Đã đăng trạng thái thành công!", status: newStatus })
   } catch (error) {
     console.error("❌ Post Status Error:", error)
@@ -509,7 +520,6 @@ app.get("/api/statuses", verifyToken, async (req, res) => {
     const currentUserId = req.user.userId
     const page = Number.parseInt(req.query.page) || 1
     const limit = Number.parseInt(req.query.limit) || 10
-
     const skip = (page - 1) * limit
 
     // Lấy trạng thái của người dùng hiện tại và những người dùng mà họ là bạn bè (đơn giản là tất cả trừ mình)
@@ -571,6 +581,7 @@ app.post("/api/calls/log", verifyToken, async (req, res) => {
     })
 
     await newCall.save()
+
     res.json({ success: true, message: "Đã ghi lại cuộc gọi.", call: newCall })
   } catch (error) {
     console.error("❌ Log Call Error:", error)
@@ -585,8 +596,8 @@ app.get("/api/calls", verifyToken, async (req, res) => {
     const limit = Number.parseInt(req.query.limit) || 10
     const filterType = req.query.type // "incoming", "outgoing", "missed"
     const filterDate = req.query.date // "today", "yesterday", "last7days"
-
     const skip = (page - 1) * limit
+
     const query = {
       $or: [{ caller: userId }, { receiver: userId }],
     }
@@ -668,7 +679,7 @@ app.post("/api/groups", verifyToken, async (req, res) => {
     memberIds.forEach((memberId) => {
       const memberUser = existingUsers.find((u) => u._id.toString() === memberId)
       if (memberUser) {
-        const memberSocketInfo = activeUsers.get(memberUser.email)
+        const memberSocketInfo = activeUsers.get(memberUser.email) // Cần lấy email từ User model
         if (memberSocketInfo && memberSocketInfo.socketId) {
           io.to(memberSocketInfo.socketId).emit("new_group_chat", {
             _id: newGroup._id,
@@ -693,11 +704,10 @@ app.get("/api/groups", verifyToken, async (req, res) => {
     const currentUserId = req.user.userId
     const page = Number.parseInt(req.query.page) || 1
     const limit = Number.parseInt(req.query.limit) || 10
-
     const skip = (page - 1) * limit
 
     const groups = await GroupChat.find({ members: currentUserId })
-      .sort({ updatedAt: -1 }) // Sắp xếp theo thời gian cập nhật gần nhất
+      .sort({ lastMessageAt: -1 }) // Sort by lastMessageAt descending
       .skip(skip)
       .limit(limit)
       .populate("members", "email name profilePictureUrl") // Lấy thông tin thành viên
@@ -747,10 +757,9 @@ app.delete("/api/messages/:chatId", verifyToken, async (req, res) => {
   try {
     const currentUserId = req.user.userId
     const chatId = req.params.chatId
-
     let result
-    const group = await GroupChat.findById(chatId)
 
+    const group = await GroupChat.findById(chatId)
     if (group) {
       // Xóa tin nhắn nhóm (chỉ admin mới có quyền xóa toàn bộ lịch sử)
       if (!group.admin.includes(currentUserId)) {
@@ -805,7 +814,6 @@ io.on("connection", (socket) => {
   // Handle message sending (bao gồm các loại nội dung khác)
   socket.on("message", async (data) => {
     const { message, sourceEmail, targetEmail, groupId, type = "text", contentUrl } = data
-
     console.log(
       `💬 Message from ${sourceEmail} to ${targetEmail || groupId} (Type: ${type}): ${message} ${
         contentUrl ? `(URL: ${contentUrl})` : ""
@@ -843,29 +851,31 @@ io.on("connection", (socket) => {
           contentUrl: contentUrl,
           status: "sent",
         })
-        await newMessage.save()
-        console.log(`✅ Group message saved to DB: ${newMessage._id}`)
 
-        // Gửi tin nhắn đến tất cả thành viên trong nhóm (trừ người gửi)
-        group.members.forEach((memberId) => {
-          if (memberId.toString() !== senderUser._id.toString()) {
-            const memberUser = activeUsers.get(memberId.email) // Cần lấy email từ User model
-            if (memberUser && memberUser.socketId) {
-              recipientSocketIds.push(memberUser.socketId)
-              recipientEmails.push(memberUser.email)
-            }
-          }
-        })
+        await newMessage.save()
+        console.log(`✅ ${groupId ? "Group" : "Individual"} message saved to DB: ${newMessage._id}`)
+
+        // Update lastMessageAt and lastMessageContent for sender
+        senderUser.lastMessageAt = newMessage.createdAt
+        senderUser.lastMessageContent = newMessage.content
+        await senderUser.save()
+
+        let messagePayload = {} // Define messagePayload here
+
+        // Update group's lastMessageAt and lastMessageContent
+        group.lastMessageAt = newMessage.createdAt
+        group.lastMessageContent = newMessage.content
+        await group.save()
 
         // Populate sender info for the payload
         await newMessage.populate("sender", "email name profilePictureUrl")
         await newMessage.populate("group", "name profilePictureUrl")
 
-        const messagePayload = {
+        messagePayload = {
           _id: newMessage._id,
           message: newMessage.content,
           sourceEmail: newMessage.sender.email,
-          targetEmail: null, // Không có targetEmail cho nhóm
+          targetEmail: null,
           groupId: newMessage.group._id,
           groupName: newMessage.group.name,
           groupProfilePictureUrl: newMessage.group.profilePictureUrl,
@@ -873,12 +883,29 @@ io.on("connection", (socket) => {
           contentUrl: newMessage.contentUrl,
           timestamp: newMessage.createdAt.toISOString(),
           status: newMessage.status,
-          senderName: newMessage.sender.name, // Thêm tên người gửi cho tin nhắn nhóm
+          senderName: newMessage.sender.name,
+          isGroup: true, // Add isGroup flag
         }
 
         // Emit tin nhắn đến tất cả thành viên online trong nhóm (trừ người gửi)
         io.to(groupId).emit("message", messagePayload)
         console.log(`✅ Group message ${newMessage._id} emitted to group ${groupId}.`)
+
+        // Emit chat_list_update to all members of the group
+        group.members.forEach(async (memberId) => {
+          const memberUser = await User.findById(memberId)
+          if (memberUser) {
+            const memberSocketInfo = activeUsers.get(memberUser.email)
+            if (memberSocketInfo && memberSocketInfo.socketId) {
+              io.to(memberSocketInfo.socketId).emit("chat_list_update", {
+                chatId: groupId,
+                lastMessageAt: newMessage.createdAt.toISOString(),
+                lastMessageContent: newMessage.content,
+                isGroup: true,
+              })
+            }
+          }
+        })
 
         // Cập nhật trạng thái tin nhắn thành 'delivered' cho những người online
         // (Logic này phức tạp hơn cho nhóm, có thể cần mảng deliveredTo)
@@ -888,10 +915,11 @@ io.on("connection", (socket) => {
           await newMessage.save()
           messagePayload.status = "delivered"
         }
+
         // Gửi lại cho người gửi để cập nhật UI của họ
         io.to(socket.id).emit("message", { ...messagePayload, isSent: true })
       } else {
-        // Tin nhắn cá nhân (logic cũ)
+        // Tin nhắn cá nhân
         const receiverUser = await User.findOne({ email: targetEmail })
         if (!receiverUser) {
           console.log(`🚫 Receiver user ${targetEmail} not found in DB. Message not saved.`)
@@ -906,10 +934,20 @@ io.on("connection", (socket) => {
           contentUrl: contentUrl,
           status: "sent",
         })
-        await newMessage.save()
-        console.log(`✅ Individual message saved to DB: ${newMessage._id}`)
 
-        const targetSocketInfo = activeUsers.get(targetEmail)
+        await newMessage.save()
+        console.log(`✅ ${groupId ? "Group" : "Individual"} message saved to DB: ${newMessage._id}`)
+
+        // Update lastMessageAt and lastMessageContent for sender
+        senderUser.lastMessageAt = newMessage.createdAt
+        senderUser.lastMessageContent = newMessage.content
+        await senderUser.save()
+
+        // Update receiver's lastMessageAt and lastMessageContent
+        receiverUser.lastMessageAt = newMessage.createdAt
+        receiverUser.lastMessageContent = newMessage.content
+        await receiverUser.save()
+
         // Populate sender and receiver info for the payload
         await newMessage.populate("sender", "email name profilePictureUrl")
         await newMessage.populate("receiver", "email name profilePictureUrl")
@@ -923,7 +961,10 @@ io.on("connection", (socket) => {
           contentUrl: newMessage.contentUrl,
           timestamp: newMessage.createdAt.toISOString(),
           status: newMessage.status,
+          isGroup: false, // Add isGroup flag
         }
+
+        const targetSocketInfo = activeUsers.get(targetEmail)
 
         if (targetSocketInfo && targetSocketInfo.socketId) {
           io.to(targetSocketInfo.socketId).emit("message", messagePayload)
@@ -931,11 +972,28 @@ io.on("connection", (socket) => {
           await newMessage.save()
           messagePayload.status = "delivered"
           console.log(`✅ Message ${newMessage._id} delivered to online user.`)
+
+          // Emit chat_list_update to receiver
+          io.to(targetSocketInfo.socketId).emit("chat_list_update", {
+            chatId: senderUser._id.toString(), // The other user's ID is the "chatId" for the receiver
+            lastMessageAt: newMessage.createdAt.toISOString(),
+            lastMessageContent: newMessage.content,
+            isGroup: false,
+          })
         } else {
           console.log(`🚫 Target user ${targetEmail} is not online. Message saved to DB as 'sent'.`)
         }
+
         // Gửi lại cho người gửi để cập nhật UI của họ
         io.to(socket.id).emit("message", { ...messagePayload, isSent: true })
+
+        // Emit chat_list_update to sender (for their own chat list)
+        io.to(socket.id).emit("chat_list_update", {
+          chatId: receiverUser._id.toString(), // The other user's ID is the "chatId" for the sender
+          lastMessageAt: newMessage.createdAt.toISOString(),
+          lastMessageContent: newMessage.content,
+          isGroup: false,
+        })
       }
     } catch (error) {
       console.error("❌ Error saving or processing message:", error)
@@ -1050,7 +1108,6 @@ app.get("/api/debug/otps", (req, res) => {
     expiresIn: Math.max(0, Math.floor((data.expiresAt - Date.now()) / 1000)),
     attempts: data.attempts,
   }))
-
   res.json({
     count: otps.length,
     otps: otps,
@@ -1074,11 +1131,11 @@ app.get("/api/debug/users", async (req, res) => {
 
 const PORT = process.env.PORT || 3000
 server.listen(PORT, () => {
-  console.log(`🚀 WhatsApp NDT Server chạy tại: http://192.168.2.34:${PORT}`)
-  console.log(`📱 Health check: http://192.168.2.34:${PORT}/api/health`)
-  console.log(`🔧 Debug OTPs: http://192.168.2.34:${PORT}/api/debug/otps`)
-  console.log(`🔧 Debug Users: http://192.168.2.34:${PORT}/api/debug/users`)
+  console.log(`🚀 WhatsApp NDT Server chạy tại: http://localhost:${PORT}`)
+  console.log(`📱 Health check: http://localhost:${PORT}/api/health`)
+  console.log(`🔧 Debug OTPs: http://localhost:${PORT}/api/debug/otps`)
+  console.log(`🔧 Debug Users: http://localhost:${PORT}/api/debug/users`)
   console.log(`📂 Uploads directory: ${uploadsDir}`)
   console.log(`💬 Socket.IO ready for real-time chat`)
   console.log(``)
-  })
+})

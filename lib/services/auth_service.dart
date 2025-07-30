@@ -1,612 +1,340 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:socket_io_client/socket_io_client.dart' as IO;
-import 'package:path/path.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class AuthService {
+  // Đã cập nhật baseUrl và socketUrl theo yêu cầu của bạn
   static const String baseUrl = 'http://192.168.2.34:3000/api';
-  static const String socketUrl = 'http://192.168.2.34:3000';
-  static const FlutterSecureStorage _storage = FlutterSecureStorage();
+  static const String socketUrl = 'http://192.168.2.34:3000'; // Base URL cho các tài nguyên tĩnh
 
+  static String? _token;
+  static Map<String, dynamic>? _currentUserData;
   static IO.Socket? _socket;
 
-  static IO.Socket getSocket() {
-    if (_socket == null) {
-      _socket = IO.io(socketUrl, <String, dynamic>{
-        'transports': ['websocket'],
-        'autoConnect': false,
-      });
-      _socket!.onConnect((_) => print('🔌 Socket Connected'));
-      _socket!.onDisconnect((_) => print('🔌 Socket Disconnected'));
-      _socket!.onError((error) => print('🔌 Socket Error: $error'));
+  static Future<void> init() async {
+    final prefs = await SharedPreferences.getInstance();
+    _token = prefs.getString('token');
+    final userDataString = prefs.getString('userData');
+    if (userDataString != null) {
+      _currentUserData = jsonDecode(userDataString);
     }
+  }
+
+  static IO.Socket getSocket() {
+    _socket ??= IO.io(socketUrl, <String, dynamic>{
+      'transports': ['websocket'],
+      'autoConnect': false,
+    });
     return _socket!;
   }
 
-  static Future<bool> testConnection() async {
-    try {
-      final response = await http.get(
-        Uri.parse('$baseUrl/health'),
-        headers: {'Content-Type': 'application/json'},
-      ).timeout(Duration(seconds: 10));
-
-      print('🔍 Health check: ${response.statusCode}');
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        print('📊 Server info: ${data}');
-      }
-      return response.statusCode == 200;
-    } catch (e) {
-      print('❌ Connection error: $e');
-      return false;
-    }
+  static String? getToken() {
+    return _token;
   }
 
-  static Future<Map<String, dynamic>> sendOTP(String email) async {
-    try {
-      print('📱 Sending REAL OTP to email: $email');
-
-      final response = await http.post(
-        Uri.parse('$baseUrl/send-otp'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'email': email,
-        }),
-      ).timeout(Duration(seconds: 30));
-
-      print('📤 OTP Response: ${response.statusCode}');
-      print('📤 Response body: ${response.body}');
-
-      final data = jsonDecode(response.body);
-
-      if (response.statusCode == 200) {
-        return {
-          'success': true,
-          'message': data['message'] ?? 'OTP đã được gửi',
-          'email': data['email'],
-        };
-      } else {
-        return {
-          'success': false,
-          'message': data['message'] ?? 'Lỗi không xác định',
-          'error': data['error'],
-          'code': data['code'],
-          'suggestion': data['suggestion'],
-        };
-      }
-    } catch (e) {
-      print('❌ Send OTP error: $e');
-      return {
-        'success': false,
-        'message': 'Lỗi kết nối: $e',
-        'suggestion': 'Kiểm tra kết nối internet và thử lại',
-      };
-    }
+  static Map<String, dynamic>? getCurrentUserData() {
+    return _currentUserData;
   }
 
-  static Future<Map<String, dynamic>> sendTestOTP(String email) async {
-    try {
-      print('🧪 Creating test OTP for email: $email');
-
-      final response = await http.post(
-        Uri.parse('$baseUrl/test-otp'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'email': email,
-        }),
-      );
-
-      final data = jsonDecode(response.body);
-
-      return {
-        'success': response.statusCode == 200,
-        'message': data['message'] ?? 'Unknown error',
-        'testOtp': data['testOtp'],
-        'email': data['email'],
-      };
-    } catch (e) {
-      return {
-        'success': false,
-        'message': 'Lỗi kết nối: $e',
-      };
-    }
-  }
-
-  static Future<Map<String, dynamic>> verifyOTP(
-      String email,
-      String countryCode,
-      String otp,
-      ) async {
-    try {
-      print('🔐 Verifying OTP: $otp for email: $email');
-
-      final response = await http.post(
-        Uri.parse('$baseUrl/verify-otp'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'email': email,
-          'otp': otp,
-        }),
-      );
-
-      print('🔐 Verify Response: ${response.statusCode} - ${response.body}');
-      final data = jsonDecode(response.body);
-
-      if (response.statusCode == 200) {
-        await saveUserData(data['token'], data['user']);
-        print('✅ Authentication successful');
-      }
-
-      return {
-        'success': response.statusCode == 200,
-        'message': data['message'] ?? 'Unknown error',
-        'token': data['token'],
-        'user': data['user'],
-        'attemptsLeft': data['attemptsLeft'],
-      };
-    } catch (e) {
-      return {
-        'success': false,
-        'message': 'Lỗi kết nối: $e',
-      };
-    }
-  }
-
-  static Future<String?> getToken() async {
-    return await _storage.read(key: 'auth_token');
-  }
-
-  static Future<Map<String, dynamic>?> getUserData() async {
-    final userDataString = await _storage.read(key: 'user_data');
-    if (userDataString != null) {
-      return jsonDecode(userDataString);
-    }
-    return null;
-  }
-
-  static Future<bool> isLoggedIn() async {
-    final token = await getToken();
-    return token != null && token.isNotEmpty;
-  }
-
-  static Future<void> logout() async {
-    await _storage.delete(key: 'auth_token');
-    await _storage.delete(key: 'user_data');
-    _socket?.disconnect();
-    print('👋 User logged out');
+  static bool isLoggedIn() {
+    return _token != null && _currentUserData != null;
   }
 
   static Future<void> saveUserData(String token, Map<String, dynamic> userData) async {
-    await _storage.write(key: 'auth_token', value: token);
-    await _storage.write(key: 'user_data', value: jsonEncode(userData));
+    final prefs = await SharedPreferences.getInstance();
+    _token = token;
+    _currentUserData = userData;
+    await prefs.setString('token', token);
+    await prefs.setString('userData', jsonEncode(userData));
+  }
+
+  static Future<void> logout() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('token');
+    await prefs.remove('userData');
+    _token = null;
+    _currentUserData = null;
+    _socket?.disconnect();
+    _socket = null;
+  }
+
+  static Future<Map<String, dynamic>> sendOTP(String email) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/send-otp'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'email': email}),
+    );
+    return jsonDecode(response.body);
+  }
+
+  static Future<Map<String, dynamic>> sendTestOTP(String email) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/test-otp'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'email': email}),
+    );
+    return jsonDecode(response.body);
+  }
+
+  static Future<Map<String, dynamic>> verifyOTP(String email, String otp) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/verify-otp'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'email': email, 'otp': otp}),
+    );
+    final data = jsonDecode(response.body);
+    if (data['success']) {
+      await saveUserData(data['token'], data['user']);
+    }
+    return data;
   }
 
   static Future<Map<String, dynamic>> fetchUserProfile() async {
-    try {
-      final token = await getToken();
-      if (token == null) {
-        return {'success': false, 'message': 'Không có token xác thực'};
-      }
-
-      final response = await http.get(
-        Uri.parse('$baseUrl/profile'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token',
-        },
-      );
-
-      final data = jsonDecode(response.body);
-      return {
-        'success': response.statusCode == 200,
-        'message': data['message'] ?? 'Unknown error',
-        'user': data['user'],
-      };
-    } catch (e) {
-      print('❌ Fetch profile error: $e');
-      return {'success': false, 'message': 'Lỗi kết nối: $e'};
+    if (_token == null) {
+      return {'success': false, 'message': 'No token found'};
     }
+    final response = await http.get(
+      Uri.parse('$baseUrl/profile'),
+      headers: {'Authorization': 'Bearer $_token'},
+    );
+    final data = jsonDecode(response.body);
+    if (data['success']) {
+      _currentUserData = data['user'];
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('userData', jsonEncode(data['user']));
+    }
+    return data;
   }
 
-  static Future<Map<String, dynamic>> updateProfile(String? name, String? status, String? profilePictureUrl) async {
-    try {
-      final token = await getToken();
-      if (token == null) {
-        return {'success': false, 'message': 'Không có token xác thực'};
-      }
-
-      final response = await http.post(
-        Uri.parse('$baseUrl/profile/update'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token',
-        },
-        body: jsonEncode({
-          'name': name,
-          'status': status,
-          'profilePictureUrl': profilePictureUrl,
-        }),
-      );
-
-      final data = jsonDecode(response.body);
-      return {
-        'success': response.statusCode == 200,
-        'message': data['message'] ?? 'Unknown error',
-        'user': data['user'],
-      };
-    } catch (e) {
-      print('❌ Update profile error: $e');
-      return {'success': false, 'message': 'Lỗi kết nối: $e'};
+  static Future<Map<String, dynamic>> updateProfile(String name, String status, String? profilePictureUrl) async {
+    if (_token == null) {
+      return {'success': false, 'message': 'No token found'};
     }
+    final response = await http.post(
+      Uri.parse('$baseUrl/profile/update'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $_token',
+      },
+      body: jsonEncode({
+        'name': name,
+        'status': status,
+        'profilePictureUrl': profilePictureUrl,
+      }),
+    );
+    final data = jsonDecode(response.body);
+    if (data['success']) {
+      await fetchUserProfile();
+    }
+    return data;
   }
 
-  static Future<Map<String, dynamic>> fetchUsers({int page = 1, int limit = 10}) async {
-    try {
-      final token = await getToken();
-      if (token == null) {
-        return {'success': false, 'message': 'Không có token xác thực'};
-      }
+  static Future<Map<String, dynamic>> fetchUsers({int page = 1, int limit = 1000, String? searchQuery, bool excludeVirtual = false}) async {
+    if (_token == null) {
+      return {'success': false, 'message': 'No token found'};
+    }
+    String queryParams = '?page=$page&limit=$limit';
+    if (searchQuery != null && searchQuery.isNotEmpty) {
+      queryParams += '&search=$searchQuery';
+    }
+    if (excludeVirtual) {
+      queryParams += '&excludeVirtual=true';
+    }
+    final response = await http.get(
+      Uri.parse('$baseUrl/users$queryParams'),
+      headers: {'Authorization': 'Bearer $_token'},
+    );
 
-      final response = await http.get(
-        Uri.parse('$baseUrl/users?page=$page&limit=$limit'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token',
-        },
-      );
-
-      final data = jsonDecode(response.body);
-      return {
-        'success': response.statusCode == 200,
-        'message': data['message'] ?? 'Unknown error',
-        'users': data['users'],
-        'currentPage': data['currentPage'],
-        'totalPages': data['totalPages'],
-        'totalUsers': data['totalUsers'],
-      };
-    } catch (e) {
-      print('❌ Fetch users error: $e');
-      return {'success': false, 'message': 'Lỗi kết nối: $e'};
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    } else {
+      throw Exception('Failed to load users: ${response.body}');
     }
   }
 
   static Future<Map<String, dynamic>> uploadFile(String filePath) async {
-    try {
-      final token = await getToken();
-      if (token == null) {
-        return {'success': false, 'message': 'Không có token xác thực'};
-      }
+    if (_token == null) {
+      return {'success': false, 'message': 'No token found'};
+    }
+    var request = http.MultipartRequest(
+      'POST',
+      Uri.parse('$baseUrl/upload/file'),
+    );
+    request.headers['Authorization'] = 'Bearer $_token';
+    request.files.add(await http.MultipartFile.fromPath('file', filePath));
 
-      var request = http.MultipartRequest(
-        'POST',
-        Uri.parse('$baseUrl/upload/file'),
-      );
-      request.headers['Authorization'] = 'Bearer $token';
-      request.files.add(await http.MultipartFile.fromPath('file', filePath, filename: basename(filePath)));
+    var response = await request.send();
+    var responseBody = await response.stream.bytesToString();
 
-      var response = await request.send();
-      var responseBody = await response.stream.bytesToString();
-      final data = jsonDecode(responseBody);
-
-      if (response.statusCode == 200) {
-        return {'success': true, 'url': data['url'], 'message': data['message']};
-      } else {
-        return {'success': false, 'message': data['message'] ?? 'Lỗi upload file'};
-      }
-    } catch (e) {
-      print('❌ Upload file error: $e');
-      return {'success': false, 'message': 'Lỗi kết nối hoặc upload file: $e'};
+    if (response.statusCode == 200) {
+      return jsonDecode(responseBody);
+    } else {
+      throw Exception('Failed to upload file: $responseBody');
     }
   }
 
-  // --- API mới cho Tin nhắn (Chat History) ---
   static Future<Map<String, dynamic>> fetchMessages(String chatId, {int page = 1, int limit = 30}) async {
-    try {
-      final token = await getToken();
-      if (token == null) {
-        return {'success': false, 'message': 'Không có token xác thực'};
-      }
-
-      final response = await http.get(
-        Uri.parse('$baseUrl/messages/$chatId?page=$page&limit=$limit'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token',
-        },
-      );
-
-      final data = jsonDecode(response.body);
-      return {
-        'success': response.statusCode == 200,
-        'message': data['message'] ?? 'Unknown error',
-        'messages': data['messages'],
-        'currentPage': data['currentPage'],
-        'totalPages': data['totalPages'],
-        'totalMessages': data['totalMessages'],
-      };
-    } catch (e) {
-      print('❌ Fetch messages error: $e');
-      return {'success': false, 'message': 'Lỗi kết nối: $e'};
+    if (_token == null) {
+      return {'success': false, 'message': 'No token found'};
+    }
+    final response = await http.get(
+      Uri.parse('$baseUrl/messages/$chatId?page=$page&limit=$limit'),
+      headers: {'Authorization': 'Bearer $_token'},
+    );
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    } else {
+      throw Exception('Failed to load messages: ${response.body}');
     }
   }
 
   static Future<Map<String, dynamic>> markMessagesAsRead(List<String> messageIds) async {
-    try {
-      final token = await getToken();
-      if (token == null) {
-        return {'success': false, 'message': 'Không có token xác thực'};
-      }
-
-      final response = await http.post(
-        Uri.parse('$baseUrl/messages/read'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token',
-        },
-        body: jsonEncode({'messageIds': messageIds}),
-      );
-
-      final data = jsonDecode(response.body);
-      return {
-        'success': response.statusCode == 200,
-        'message': data['message'] ?? 'Unknown error',
-      };
-    } catch (e) {
-      print('❌ Mark messages as read error: $e');
-      return {'success': false, 'message': 'Lỗi kết nối: $e'};
+    if (_token == null) {
+      return {'success': false, 'message': 'No token found'};
     }
+    final response = await http.post(
+      Uri.parse('$baseUrl/messages/read'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $_token',
+      },
+      body: jsonEncode({'messageIds': messageIds}),
+    );
+    return jsonDecode(response.body);
   }
 
-  static Future<Map<String, dynamic>> deleteChatHistory(String chatId) async {
-    try {
-      final token = await getToken();
-      if (token == null) {
-        return {'success': false, 'message': 'Không có token xác thực'};
-      }
-
-      final response = await http.delete(
-        Uri.parse('$baseUrl/messages/$chatId'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token',
-        },
-      );
-
-      final data = jsonDecode(response.body);
-      return {
-        'success': response.statusCode == 200,
-        'message': data['message'] ?? 'Unknown error',
-      };
-    } catch (e) {
-      print('❌ Delete chat history error: $e');
-      return {'success': false, 'message': 'Lỗi kết nối: $e'};
-    }
-  }
-
-  // --- API mới cho Trạng thái (Status) ---
   static Future<Map<String, dynamic>> postStatus(String type, {String? content, String? mediaUrl}) async {
-    try {
-      final token = await getToken();
-      if (token == null) {
-        return {'success': false, 'message': 'Không có token xác thực'};
-      }
+    if (_token == null) {
+      return {'success': false, 'message': 'No token found'};
+    }
+    final response = await http.post(
+      Uri.parse('$baseUrl/status'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $_token',
+      },
+      body: jsonEncode({
+        'type': type,
+        'content': content,
+        'mediaUrl': mediaUrl,
+      }),
+    );
+    return jsonDecode(response.body);
+  }
 
-      final response = await http.post(
-        Uri.parse('$baseUrl/status'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token',
-        },
-        body: jsonEncode({
-          'type': type,
-          'content': content,
-          'mediaUrl': mediaUrl,
-        }),
-      );
-
-      final data = jsonDecode(response.body);
-      return {
-        'success': response.statusCode == 200,
-        'message': data['message'] ?? 'Unknown error',
-        'status': data['status'],
-      };
-    } catch (e) {
-      print('❌ Post status error: $e');
-      return {'success': false, 'message': 'Lỗi kết nối: $e'};
+  static Future<Map<String, dynamic>> fetchMyStatuses() async {
+    if (_token == null) {
+      return {'success': false, 'message': 'No token found'};
+    }
+    final response = await http.get(
+      Uri.parse('$baseUrl/my-statuses'),
+      headers: {'Authorization': 'Bearer $_token'},
+    );
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    } else {
+      throw Exception('Failed to load my statuses: ${response.body}');
     }
   }
 
   static Future<Map<String, dynamic>> fetchStatuses({int page = 1, int limit = 10}) async {
-    try {
-      final token = await getToken();
-      if (token == null) {
-        return {'success': false, 'message': 'Không có token xác thực'};
-      }
-
-      final response = await http.get(
-        Uri.parse('$baseUrl/statuses?page=$page&limit=$limit'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token',
-        },
-      );
-
-      final data = jsonDecode(response.body);
-      return {
-        'success': response.statusCode == 200,
-        'message': data['message'] ?? 'Unknown error',
-        'statuses': data['statuses'],
-        'currentPage': data['currentPage'],
-        'totalPages': data['totalPages'],
-        'totalStatuses': data['totalStatuses'],
-      };
-    } catch (e) {
-      print('❌ Fetch statuses error: $e');
-      return {'success': false, 'message': 'Lỗi kết nối: $e'};
+    if (_token == null) {
+      return {'success': false, 'message': 'No token found'};
+    }
+    final response = await http.get(
+      Uri.parse('$baseUrl/statuses?page=$page&limit=$limit'),
+      headers: {'Authorization': 'Bearer $_token'},
+    );
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    } else {
+      throw Exception('Failed to load statuses: ${response.body}');
     }
   }
 
-  static Future<Map<String, dynamic>> fetchMyStatuses() async {
-    try {
-      final token = await getToken();
-      if (token == null) {
-        return {'success': false, 'message': 'Không có token xác thực'};
-      }
-
-      final response = await http.get(
-        Uri.parse('$baseUrl/my-statuses'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token',
-        },
-      );
-
-      final data = jsonDecode(response.body);
-      return {
-        'success': response.statusCode == 200,
-        'message': data['message'] ?? 'Unknown error',
-        'statuses': data['statuses'],
-      };
-    } catch (e) {
-      print('❌ Fetch my statuses error: $e');
-      return {'success': false, 'message': 'Lỗi kết nối: $e'};
+  static Future<Map<String, dynamic>> fetchCalls({int page = 1, int limit = 10, String? filterType, String? filterDate}) async {
+    if (_token == null) {
+      return {'success': false, 'message': 'No token found'};
+    }
+    String queryParams = '?page=$page&limit=$limit';
+    if (filterType != null && filterType.isNotEmpty) {
+      queryParams += '&type=$filterType';
+    }
+    if (filterDate != null && filterDate.isNotEmpty) {
+      queryParams += '&date=$filterDate';
+    }
+    final response = await http.get(
+      Uri.parse('$baseUrl/calls$queryParams'),
+      headers: {'Authorization': 'Bearer $_token'},
+    );
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    } else {
+      throw Exception('Failed to load calls: ${response.body}');
     }
   }
 
-  // --- API mới cho Cuộc gọi (Call History) ---
-  static Future<Map<String, dynamic>> logCall(String receiverEmail, String callType, String callStatus, {int duration = 0}) async {
-    try {
-      final token = await getToken();
-      if (token == null) {
-        return {'success': false, 'message': 'Không có token xác thực'};
-      }
-
-      final response = await http.post(
-        Uri.parse('$baseUrl/calls/log'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token',
-        },
-        body: jsonEncode({
-          'receiverEmail': receiverEmail,
-          'callType': callType,
-          'callStatus': callStatus,
-          'duration': duration,
-        }),
-      );
-
-      final data = jsonDecode(response.body);
-      return {
-        'success': response.statusCode == 200,
-        'message': data['message'] ?? 'Unknown error',
-        'call': data['call'],
-      };
-    } catch (e) {
-      print('❌ Log call error: $e');
-      return {'success': false, 'message': 'Lỗi kết nối: $e'};
+  static Future<Map<String, dynamic>> deleteChatHistory(String chatId) async {
+    if (_token == null) {
+      return {'success': false, 'message': 'No token found'};
     }
+    final response = await http.delete(
+      Uri.parse('$baseUrl/messages/$chatId'),
+      headers: {'Authorization': 'Bearer $_token'},
+    );
+    return jsonDecode(response.body);
   }
 
-  static Future<Map<String, dynamic>> fetchCalls({int page = 1, int limit = 10, String? type, String? date}) async {
-    try {
-      final token = await getToken();
-      if (token == null) {
-        return {'success': false, 'message': 'Không có token xác thực'};
-      }
-
-      String queryParams = '?page=$page&limit=$limit';
-      if (type != null && type.isNotEmpty) {
-        queryParams += '&type=$type';
-      }
-      if (date != null && date.isNotEmpty) {
-        queryParams += '&date=$date';
-      }
-
-      final response = await http.get(
-        Uri.parse('$baseUrl/calls$queryParams'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token',
-        },
-      );
-
-      final data = jsonDecode(response.body);
-      return {
-        'success': response.statusCode == 200,
-        'message': data['message'] ?? 'Unknown error',
-        'calls': data['calls'],
-        'currentPage': data['currentPage'],
-        'totalPages': data['totalPages'],
-        'totalCalls': data['totalCalls'],
-      };
-    } catch (e) {
-      print('❌ Fetch calls error: $e');
-      return {'success': false, 'message': 'Lỗi kết nối: $e'};
+  static Future<Map<String, dynamic>> createGroup(String name, List<String> memberIds, String? description, String? profilePictureUrl) async {
+    if (_token == null) {
+      return {'success': false, 'message': 'No token found'};
     }
-  }
-
-  // --- API mới cho Nhóm chat (Group Chat) ---
-  static Future<Map<String, dynamic>> createGroup(String name, List<String> memberIds, {String? description, String? profilePictureUrl}) async {
-    try {
-      final token = await getToken();
-      if (token == null) {
-        return {'success': false, 'message': 'Không có token xác thực'};
-      }
-
-      final response = await http.post(
-        Uri.parse('$baseUrl/groups'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token',
-        },
-        body: jsonEncode({
-          'name': name,
-          'memberIds': memberIds,
-          'description': description,
-          'profilePictureUrl': profilePictureUrl,
-        }),
-      );
-
-      final data = jsonDecode(response.body);
-      return {
-        'success': response.statusCode == 200,
-        'message': data['message'] ?? 'Unknown error',
-        'group': data['group'],
-      };
-    } catch (e) {
-      print('❌ Create group error: $e');
-      return {'success': false, 'message': 'Lỗi kết nối: $e'};
-    }
+    final response = await http.post(
+      Uri.parse('$baseUrl/groups'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $_token',
+      },
+      body: jsonEncode({
+        'name': name,
+        'memberIds': memberIds,
+        'description': description,
+        'profilePictureUrl': profilePictureUrl,
+      }),
+    );
+    return jsonDecode(response.body);
   }
 
   static Future<Map<String, dynamic>> fetchGroups({int page = 1, int limit = 10}) async {
-    try {
-      final token = await getToken();
-      if (token == null) {
-        return {'success': false, 'message': 'Không có token xác thực'};
-      }
-
-      final response = await http.get(
-        Uri.parse('$baseUrl/groups?page=$page&limit=$limit'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token',
-        },
-      );
-
-      final data = jsonDecode(response.body);
-      return {
-        'success': response.statusCode == 200,
-        'message': data['message'] ?? 'Unknown error',
-        'groups': data['groups'],
-        'currentPage': data['currentPage'],
-        'totalPages': data['totalPages'],
-        'totalGroups': data['totalGroups'],
-      };
-    } catch (e) {
-      print('❌ Fetch groups error: $e');
-      return {'success': false, 'message': 'Lỗi kết nối: $e'};
+    if (_token == null) {
+      return {'success': false, 'message': 'No token found'};
     }
+    final response = await http.get(
+      Uri.parse('$baseUrl/groups?page=$page&limit=$limit'),
+      headers: {'Authorization': 'Bearer $_token'},
+    );
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    } else {
+      throw Exception('Failed to load groups: ${response.body}');
+    }
+  }
+
+  // Hàm tiện ích để lấy URL ảnh đầy đủ
+  static String getFullImageUrl(String? relativeUrl) {
+    // Nếu relativeUrl là null hoặc rỗng, sử dụng đường dẫn ảnh mặc định của backend.
+    // Điều này giả định backend phục vụ ảnh mặc định tại /uploads/default-user.png
+    final String effectiveRelativeUrl = (relativeUrl == null || relativeUrl.isEmpty)
+        ? "/uploads/default-user.png" // Sử dụng đường dẫn mặc định của backend
+        : relativeUrl;
+
+    // Kiểm tra nếu URL đã là tuyệt đối
+    if (effectiveRelativeUrl.startsWith('http://') || effectiveRelativeUrl.startsWith('https://')) {
+      return effectiveRelativeUrl;
+    }
+    // Nếu là đường dẫn tương đối, ghép với socketUrl (base URL của backend)
+    // Đảm bảo không có dấu '/' thừa hoặc thiếu
+    return '$socketUrl${effectiveRelativeUrl.startsWith('/') ? '' : '/'}$effectiveRelativeUrl';
   }
 }

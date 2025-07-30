@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart'; // Import image_picker
-import 'dart:io'; // For File
+import 'package:image_picker/image_picker.dart';
+import 'dart:io';
 import '../services/auth_service.dart';
+import 'package:whatsappndt1/main.dart';
 
 class ProfilePage extends StatefulWidget {
   @override
@@ -13,8 +14,8 @@ class _ProfilePageState extends State<ProfilePage> {
   TextEditingController statusController = TextEditingController();
   bool isLoading = false;
   Map<String, dynamic>? userData;
-  String? _profilePictureUrl; // URL ảnh đại diện hiện tại
-  File? _newProfileImage; // File ảnh mới được chọn
+  String? _profilePictureUrl;
+  File? _newProfileImage;
 
   @override
   void initState() {
@@ -30,9 +31,9 @@ class _ProfilePageState extends State<ProfilePage> {
     if (result['success']) {
       setState(() {
         userData = result['user'];
+        _profilePictureUrl = userData!['profilePictureUrl'];
         nameController.text = userData!['name'] ?? '';
         statusController.text = userData!['status'] ?? '';
-        _profilePictureUrl = userData!['profilePictureUrl']; // Lấy URL ảnh
       });
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -58,11 +59,8 @@ class _ProfilePageState extends State<ProfilePage> {
     setState(() {
       isLoading = true;
     });
-
     String? finalProfilePictureUrl = _profilePictureUrl;
-
     if (_newProfileImage != null) {
-      // Upload ảnh mới nếu có
       final uploadResult = await AuthService.uploadFile(_newProfileImage!.path);
       if (uploadResult['success']) {
         finalProfilePictureUrl = uploadResult['url'];
@@ -76,22 +74,18 @@ class _ProfilePageState extends State<ProfilePage> {
         setState(() {
           isLoading = false;
         });
-        return; // Dừng nếu upload ảnh thất bại
+        return;
       }
     }
-
     final result = await AuthService.updateProfile(
       nameController.text.trim(),
       statusController.text.trim(),
-      finalProfilePictureUrl, // Gửi URL ảnh cuối cùng
+      finalProfilePictureUrl,
     );
-
     if (result['success']) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text("Cập nhật hồ sơ thành công!")),
       );
-      // Cập nhật lại dữ liệu trong AuthService sau khi update thành công
-      // AuthService.saveUserData đã được gọi trong AuthService.updateProfile
       Navigator.pop(context);
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -118,16 +112,28 @@ class _ProfilePageState extends State<ProfilePage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
+            ListTile(
+              title: const Text('Chế độ tối'),
+              trailing: Switch(
+                value: themeNotifier.value == ThemeMode.dark,
+                onChanged: (isOn) {
+                  setState(() {
+                    themeNotifier.value = isOn ? ThemeMode.dark : ThemeMode.light;
+                  });
+                },
+              ),
+            ),
+            SizedBox(height: 20),
+
             GestureDetector(
-              onTap: _pickImage, // Nhấn vào để chọn ảnh
+              onTap: _pickImage,
               child: CircleAvatar(
                 radius: 60,
                 backgroundColor: Color(0xFF075E54),
                 backgroundImage: _newProfileImage != null
-                    ? FileImage(_newProfileImage!) // Ảnh mới được chọn
-                    : (_profilePictureUrl != null && _profilePictureUrl!.isNotEmpty
-                    ? NetworkImage(_profilePictureUrl!) // Ảnh từ server
-                    : null) as ImageProvider<Object>?,
+                    ? FileImage(_newProfileImage!)
+                // Đã sửa lỗi: Sử dụng AuthService.getFullImageUrl
+                    : NetworkImage(AuthService.getFullImageUrl(_profilePictureUrl)),
                 child: _newProfileImage == null && (_profilePictureUrl == null || _profilePictureUrl!.isEmpty)
                     ? Icon(Icons.person, size: 80, color: Colors.white)
                     : null,

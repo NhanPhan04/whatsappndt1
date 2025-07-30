@@ -34,62 +34,77 @@ async function seedDatabase() {
         email: "alice@example.com",
         name: "Alice",
         status: "Hey there! I'm using WhatsApp NDT!",
-        profilePictureUrl: "https://i.pravatar.cc/150?img=1",
+        profilePictureUrl: "/uploads/default-user.png", // Updated default
         verified: true,
+        lastMessageAt: new Date(Date.now() - 1000 * 60 * 1), // Example: 1 minute ago
+        lastMessageContent: "Hello Charlie!", // Example last message
       },
       {
         email: "bob@example.com",
         name: "Bob",
         status: "Available",
-        profilePictureUrl: "https://i.pravatar.cc/150?img=2",
+        profilePictureUrl: "/uploads/default-user.png", // Updated default
         verified: true,
+        lastMessageAt: new Date(Date.now() - 1000 * 60 * 2), // Example: 2 minutes ago
+        lastMessageContent: "Looks great!", // Example last message
       },
       {
         email: "charlie@example.com",
         name: "Charlie",
         status: "Busy",
-        profilePictureUrl: "https://i.pravatar.cc/150?img=3",
+        profilePictureUrl: "/uploads/default-user.png", // Updated default
         verified: true,
+        lastMessageAt: new Date(Date.now() - 1000 * 60 * 9), // Example: 9 minutes ago
+        lastMessageContent: "Yes, confirmed.", // Example last message
       },
       {
         email: "david@example.com",
         name: "David",
         status: "At the gym",
-        profilePictureUrl: "https://i.pravatar.cc/150?img=4",
+        profilePictureUrl: "/uploads/default-user.png", // Updated default
         verified: true,
+        lastMessageAt: new Date(Date.now() - 1000 * 60 * 9), // Example: 9 minutes ago
+        lastMessageContent: "Yes, confirmed.", // Example last message
       },
       {
         email: "eve@example.com",
         name: "Eve",
         status: "Coding...",
-        profilePictureUrl: "https://i.pravatar.cc/150?img=5",
+        profilePictureUrl: "/uploads/default-user.png", // Updated default
         verified: true,
+        lastMessageAt: new Date(Date.now() - 1000 * 60 * 30), // Example: 30 minutes ago
+        lastMessageContent: "Declined call.", // Example last message
       },
       // Thêm người dùng mặc định từ Flutter ChatPage
       {
         email: "devstack@example.com",
         name: "Dev Stack",
         status: "A full stack developer",
-        profilePictureUrl: "https://i.pravatar.cc/150?img=6",
+        profilePictureUrl: "/uploads/default-user.png", // Updated default
         verified: true,
+        lastMessageAt: new Date(Date.now() - 1000 * 60 * 14),
+        lastMessageContent: "Chào Alice! Rất tốt, cảm ơn bạn!",
       },
       {
         email: "flutterteam@example.com",
         name: "Flutter Team",
         status: "New Flutter update is amazing!",
-        profilePictureUrl: "https://i.pravatar.cc/150?img=7",
+        profilePictureUrl: "/uploads/default-user.png", // Updated default
         verified: true,
+        lastMessageAt: new Date(Date.now() - 1000 * 60 * 12),
+        lastMessageContent: "Có bản cập nhật mới nào không?",
       },
       // THÊM EMAIL CỦA BẠN VÀO ĐÂY
       {
         email: "cphanthanhnhan74@gmail.com",
         name: "Phan Thanh Nhan",
         status: "Đang phát triển ứng dụng WhatsApp NDT!",
-        profilePictureUrl: "https://i.pravatar.cc/150?img=8", // Ảnh đại diện khác
+        profilePictureUrl: "/uploads/default-user.png", // Updated default
         verified: true,
+        lastMessageAt: new Date(Date.now() - 1000 * 60 * 1),
+        lastMessageContent: "Bạn có muốn thử tính năng mới không?",
       },
     ]
-
     // Thêm các người dùng bổ sung để đạt tổng cộng 30 người dùng
     for (let i = 9; usersData.length < 30; i++) {
       // Bắt đầu từ img=9 để tránh trùng lặp
@@ -97,11 +112,12 @@ async function seedDatabase() {
         email: `user${i}@example.com`,
         name: `User ${i}`,
         status: `Hello from User ${i}!`,
-        profilePictureUrl: `https://i.pravatar.cc/150?img=${i}`,
+        profilePictureUrl: `/uploads/default-user.png`, // Updated default
         verified: true,
+        lastMessageAt: new Date(Date.now() - Math.floor(Math.random() * 1000 * 60 * 60 * 24)), // Random time in last 24h
+        lastMessageContent: `Random message ${i}`,
       })
     }
-
     const users = await User.insertMany(usersData)
     // Gán lại các biến người dùng chính xác sau khi insertMany
     const [alice, bob, charlie, david, eve, devstack, flutterteam, phanthanhnhan, ...otherUsers] = users
@@ -112,17 +128,20 @@ async function seedDatabase() {
     const group1 = await GroupChat.create({
       name: "Flutter Devs",
       description: "Nhóm dành cho các nhà phát triển Flutter",
-      profilePictureUrl: "https://i.pravatar.cc/150?img=50",
+      profilePictureUrl: "/uploads/default-group.png", // Updated default
       members: [alice._id, bob._id, phanthanhnhan._id, devstack._id, flutterteam._id],
       admin: [alice._id, phanthanhnhan._id],
+      lastMessageAt: new Date(Date.now() - 1000 * 60 * 18),
+      lastMessageContent: "Có ai đang làm việc với Flutter 3.0 không?",
     })
-
     const group2 = await GroupChat.create({
       name: "Bạn bè thân thiết",
       description: "Nhóm bạn bè thân thiết của Nhan",
-      profilePictureUrl: "https://i.pravatar.cc/150?img=51",
+      profilePictureUrl: "/uploads/default-group.png", // Updated default
       members: [phanthanhnhan._id, charlie._id, david._id],
       admin: [phanthanhnhan._id],
+      lastMessageAt: new Date(Date.now() - 1000 * 60 * 10),
+      lastMessageContent: "Nhóm bạn bè thân thiết của tôi!",
     })
     console.log(`👨‍👩‍👧‍👦 Created 2 group chats.`)
 
@@ -408,24 +427,20 @@ async function seedDatabase() {
         timestamp: new Date(Date.now() - 1000 * 60 * 15),
       },
     ]
-
     // Thêm 41 cuộc gọi bổ sung để đạt tổng cộng 50 cuộc gọi
     const callTypes = ["audio", "video"]
     const callStatuses = ["incoming", "outgoing", "missed", "answered", "declined"]
-
     for (let i = 0; i < 41; i++) {
       const randomCallerIndex = Math.floor(Math.random() * users.length)
       let randomReceiverIndex = Math.floor(Math.random() * users.length)
       while (randomReceiverIndex === randomCallerIndex) {
         randomReceiverIndex = Math.floor(Math.random() * users.length)
       }
-
       const caller = users[randomCallerIndex]
       const receiver = users[randomReceiverIndex]
       const callType = callTypes[Math.floor(Math.random() * callTypes.length)]
       const callStatus = callStatuses[Math.floor(Math.random() * callStatuses.length)]
       const duration = callStatus === "answered" ? Math.floor(Math.random() * 600) + 10 : 0 // 10-610 giây nếu answered
-
       callsData.push({
         caller: caller._id,
         receiver: receiver._id,
@@ -435,7 +450,6 @@ async function seedDatabase() {
         timestamp: new Date(Date.now() - Math.floor(Math.random() * 1000 * 60 * 60 * 24 * 7)), // Trong vòng 7 ngày qua
       })
     }
-
     const calls = await Call.insertMany(callsData)
     console.log(`📞 Created ${calls.length} calls.`)
 

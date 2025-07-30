@@ -12,20 +12,16 @@ class LandingScreen extends StatefulWidget {
 
 class _LandingScreenState extends State<LandingScreen> {
   TextEditingController emailController = TextEditingController();
-
   bool isLoading = false;
-  // bool connectionStatus = false; // Bỏ biến này
-  // String connectionMessage = "Đang kiểm tra kết nối..."; // Bỏ biến này
-
   @override
   void initState() {
     super.initState();
     _checkLoginStatus(); // Kiểm tra trạng thái đăng nhập khi khởi động
-    // _checkConnection(); // Bỏ gọi hàm này
   }
 
   Future<void> _checkLoginStatus() async {
-    final isLoggedIn = await AuthService.isLoggedIn();
+    await AuthService.init(); // Khởi tạo AuthService để tải token/user data
+    final isLoggedIn = AuthService.isLoggedIn(); // Đã sửa lỗi: isLoggedIn
     if (isLoggedIn) {
       Navigator.pushReplacement(
         context,
@@ -34,25 +30,19 @@ class _LandingScreenState extends State<LandingScreen> {
     }
   }
 
-  // Bỏ hàm _checkConnection()
-
   Future<void> _sendOTP() async {
     print('🚀 Send OTP button pressed');
-
     if (emailController.text.trim().isEmpty) {
       _showSnackBar("Vui lòng nhập địa chỉ email", isError: true);
       return;
     }
-
     if (!EmailValidator.validate(emailController.text.trim())) {
       _showSnackBar("Địa chỉ email không hợp lệ", isError: true);
       return;
     }
-
     setState(() {
       isLoading = true;
     });
-
     try {
       final useRealOTP = await _showOTPChoiceDialog();
       if (useRealOTP == null) {
@@ -61,26 +51,20 @@ class _LandingScreenState extends State<LandingScreen> {
         });
         return;
       }
-
       print('🎯 User chose: ${useRealOTP ? "Real OTP" : "Test OTP"}');
-
       Map<String, dynamic> result;
-
       if (useRealOTP) {
-        result = await AuthService.sendOTP(
+        result = await AuthService.sendOTP( // Đã sửa lỗi: sendOTP
           emailController.text.trim(),
         );
       } else {
-        result = await AuthService.sendTestOTP(
+        result = await AuthService.sendTestOTP( // Đã sửa lỗi: sendTestOTP
           emailController.text.trim(),
         );
       }
-
       print('📤 OTP Result: $result');
-
       if (result['success']) {
         _showSnackBar(result['message'], isError: false);
-
         Navigator.push(
           context,
           MaterialPageRoute(
@@ -147,8 +131,6 @@ class _LandingScreenState extends State<LandingScreen> {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 SizedBox(height: 80),
-
-                // Logo
                 Container(
                   width: 100,
                   height: 100,
@@ -158,10 +140,7 @@ class _LandingScreenState extends State<LandingScreen> {
                   ),
                   child: Icon(Icons.chat, size: 50, color: Colors.white),
                 ),
-
                 SizedBox(height: 30),
-
-                // Title
                 Text(
                   "WhatsApp NDT",
                   style: TextStyle(
@@ -170,40 +149,8 @@ class _LandingScreenState extends State<LandingScreen> {
                     color: Color(0xFF075E54),
                   ),
                 ),
-
                 SizedBox(height: 20),
-
-                // Bỏ phần Connection status
-                // Container(
-                //   padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                //   decoration: BoxDecoration(
-                //     color: connectionStatus ? Colors.green[100] : Colors.red[100],
-                //     borderRadius: BorderRadius.circular(20),
-                //   ),
-                //   child: Row(
-                //     mainAxisSize: MainAxisSize.min,
-                //     children: [
-                //       Icon(
-                //         connectionStatus ? Icons.wifi : Icons.wifi_off,
-                //         size: 16,
-                //         color: connectionStatus ? Colors.green : Colors.red,
-                //       ),
-                //       SizedBox(width: 8),
-                //       Text(
-                //         connectionMessage,
-                //         style: TextStyle(
-                //           fontSize: 12,
-                //           color: connectionStatus ? Colors.green[800] : Colors.red[800],
-                //           fontWeight: FontWeight.w500,
-                //         ),
-                //       ),
-                //     ],
-                //   ),
-                // ),
-
                 SizedBox(height: 40),
-
-                // Phần nhập email (luôn hiển thị)
                 Text(
                   "Nhập địa chỉ email của bạn",
                   style: TextStyle(
@@ -212,10 +159,7 @@ class _LandingScreenState extends State<LandingScreen> {
                     color: Colors.grey[700],
                   ),
                 ),
-
                 SizedBox(height: 20),
-
-                // Email input
                 TextField(
                   controller: emailController,
                   keyboardType: TextInputType.emailAddress,
@@ -232,10 +176,7 @@ class _LandingScreenState extends State<LandingScreen> {
                   ),
                   style: TextStyle(fontSize: 16),
                 ),
-
                 SizedBox(height: 30),
-
-                // Send OTP button
                 SizedBox(
                   width: double.infinity,
                   height: 50,
@@ -266,10 +207,7 @@ class _LandingScreenState extends State<LandingScreen> {
                     ),
                   ),
                 ),
-
                 SizedBox(height: 20),
-
-                // Info text
                 Text(
                   "Chúng tôi sẽ gửi mã OTP đến email của bạn",
                   textAlign: TextAlign.center,
@@ -278,7 +216,6 @@ class _LandingScreenState extends State<LandingScreen> {
                     color: Colors.grey[600],
                   ),
                 ),
-
                 SizedBox(height: 40),
               ],
             ),

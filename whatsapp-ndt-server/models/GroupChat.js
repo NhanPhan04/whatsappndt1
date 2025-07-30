@@ -14,7 +14,7 @@ const groupChatSchema = new mongoose.Schema(
     },
     profilePictureUrl: {
       type: String,
-      default: "",
+      default: "/uploads/default-group.png", // Default group image
     },
     members: [
       {
@@ -30,9 +30,18 @@ const groupChatSchema = new mongoose.Schema(
         required: true,
       },
     ],
+    lastMessageAt: {
+      type: Date,
+      default: Date.now,
+    },
+    lastMessageContent: {
+      type: String,
+      default: "",
+      trim: true,
+    },
   },
   {
-    timestamps: true,
+    timestamps: true, // Adds createdAt and updatedAt
   },
 )
 
